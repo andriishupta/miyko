@@ -7,24 +7,50 @@ import '@/global.css';
 
 import { Platform } from 'react-native';
 
+/** Brand orange sampled from the Silpo repeat-order asset gradient. */
+export const Brand = {
+  orange: '#F1842A',
+} as const;
+
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
+    text: '#241A15',
+    background: '#FFF9F5',
+    backgroundElement: '#FFFFFF',
+    backgroundSelected: '#FFF0E6',
+    textSecondary: '#77675E',
+    border: '#EADFD8',
+    accent: Brand.orange,
+    accentSoft: '#FFE2D2',
+    accentContrast: '#FFFFFF',
+    warning: '#A64B13',
+    success: '#31724C',
+    danger: '#B94D45',
   },
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    text: '#FFF7F2',
+    background: '#17110D',
+    backgroundElement: '#241A15',
+    backgroundSelected: '#3A2519',
+    textSecondary: '#C8B1A5',
+    border: '#4A3327',
+    accent: Brand.orange,
+    accentSoft: '#4B2D1F',
+    accentContrast: '#2A160C',
+    warning: '#FFB169',
+    success: '#98D8A9',
+    danger: '#FF9387',
   },
 } as const;
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+
+export const Radius = {
+  small: 12,
+  medium: 18,
+  large: 28,
+  pill: 999,
+} as const;
 
 export const Fonts = Platform.select({
   ios: {

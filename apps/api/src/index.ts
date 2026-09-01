@@ -1,17 +1,10 @@
 import { serve } from '@hono/node-server'
-import { Hono } from 'hono'
-
-import { createClient } from '@miyko/database/client'
-
-const app = new Hono()
-
-app.get('/', (c) => {
-  return c.text('Hello Hono!')
-})
+import { app } from './app.js'
+import { config } from './lib/config.js'
 
 serve({
   fetch: app.fetch,
-  port: 3000
+  port: config.port,
 }, (info) => {
-  console.log(`Server is running on http://localhost:${info.port}`)
+  console.log(`MiyKo mock API is running on http://localhost:${info.port}`)
 })
