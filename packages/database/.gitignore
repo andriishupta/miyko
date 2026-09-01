@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# TypeScript and package output
+dist/
+out/
+build/
+*.tsbuildinfo
+
+# Test and coverage output
+coverage/
+.nyc_output/
+test-results/
+
+# Local runtime files
+.env
+.env.*
+!.env.example
+*.log
+
+# Temporary files and caches
+tmp/
+temp/
+.tmp/
+.cache/
+*.tmp
+*.temp
+
+# Local IDE files
+.DS_Store
+.vscode/
+.idea/
+
+# Drizzle migrations are intentionally not ignored.
