@@ -3,7 +3,7 @@ import { and, eq, gt, or } from 'drizzle-orm'
 import { householdInvitations, householdMembers, households, users } from '@miyko/database/schema'
 import type { AuthUser, CreateHouseholdResponse, HouseholdInvitation, HouseholdSummary, InviteMemberRequest, RequestContext } from '@miyko/contracts'
 import { db } from '../../lib/database.js'
-import { forbidden, notFound } from '../../lib/errors.js'
+import { notFound } from '../../lib/errors.js'
 import { sha256 } from '../auth/auth.service.js'
 import { toContractHousehold, toContractMember, toContractMembership } from '../../lib/serializers.js'
 
@@ -34,7 +34,6 @@ export class HouseholdsService {
   }
 
   async invite(context: RequestContext, input: InviteMemberRequest) {
-    if (context.membership.role !== 'owner' && context.membership.role !== 'admin') throw forbidden()
     const invitee = await db.query.users.findFirst({ where: eq(users.normalizedEmail, input.email.trim().toLowerCase()) })
     const token = randomBytes(32).toString('base64url')
     const row = await db.insert(householdInvitations).values({

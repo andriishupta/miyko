@@ -3,6 +3,7 @@ import { parseJson, parseParams } from "../../middleware/validation.js";
 import { rateLimit } from "../../middleware/rate-limit.js";
 import { AppError } from "../../lib/errors.js";
 import { createWorkflowSchema, workflowActionSchema, workflowIdSchema } from "./workflows.schemas.js";
+import { requireWorkflowActionAccess } from "./workflows.access.js";
 import { workflowsService } from "./workflows.service.js";
 
 export const workflowsRoutes = new Hono();
@@ -17,5 +18,8 @@ workflowsRoutes.post("/:workflowId/actions", rateLimit("workflow-action", 60, 60
   const { workflowId } = parseParams(c, workflowIdSchema);
   const idempotencyKey = c.req.header("idempotency-key")?.trim();
   if (!idempotencyKey || idempotencyKey.length > 255) throw new AppError("IDEMPOTENCY_KEY_INVALID", "A valid Idempotency-Key is required for workflow actions", 400);
-  return c.json({ data: { workflow: await workflowsService.requestAction(c.get("requestContext"), workflowId, await parseJson(c, workflowActionSchema), idempotencyKey) } });
+  const action = await parseJson(c, workflowActionSchema);
+  const context = c.get("requestContext");
+  requireWorkflowActionAccess(context, action);
+  return c.json({ data: { workflow: await workflowsService.requestAction(context, workflowId, action, idempotencyKey) } });
 });

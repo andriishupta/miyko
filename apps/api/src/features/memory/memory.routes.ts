@@ -1,12 +1,18 @@
 import { Hono } from 'hono'
 import { parseJson, parseQuery } from '../../middleware/validation.js'
 import { memoryQuerySchema, memoryWriteSchema } from './memory.schemas.js'
+import { requireMemoryNamespace } from './memory.access.js'
 import { memoryService } from './memory.service.js'
 
 export const memoryRoutes = new Hono()
 memoryRoutes.get('/status', async (c) => c.json({ data: await memoryService.status() }))
 memoryRoutes.get('/', async (c) => {
   const query = parseQuery(c, memoryQuerySchema)
-  return c.json({ data: await memoryService.search(c.get('requestContext'), query.query, query.memberId) })
+  const namespace = await requireMemoryNamespace(c.get('requestContext'), query.memberId)
+  return c.json({ data: await memoryService.search(namespace, query.query) })
 })
-memoryRoutes.post('/', async (c) => c.json({ data: await memoryService.write(c.get('requestContext'), await parseJson(c, memoryWriteSchema)) }, 201))
+memoryRoutes.post('/', async (c) => {
+  const input = await parseJson(c, memoryWriteSchema)
+  const namespace = await requireMemoryNamespace(c.get('requestContext'), input.memberId)
+  return c.json({ data: await memoryService.write(namespace, input) }, 201)
+})

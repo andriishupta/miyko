@@ -30,7 +30,7 @@ applySecurityMiddleware(app)
 app.use('*', requestContextMiddleware)
 app.use('*', requestLoggingMiddleware)
 
-app.get('/health', (c) => c.json({ data: { status: 'ok', service: 'miyko-api', mode: 'scaffold' } }))
+app.get('/health', (c) => c.json({ data: { status: 'ok', service: 'miyko-api' } }))
 app.route('/auth', authRoutes)
 app.route('/invitations', invitationAcceptanceRoutes)
 app.route('/onboarding', onboardingRoutes)

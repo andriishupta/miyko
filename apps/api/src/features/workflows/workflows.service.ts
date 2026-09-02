@@ -3,7 +3,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import { outboxEvents, workflowApprovals, workflows } from "@miyko/database/schema";
 import type { RequestContext, Workflow, WorkflowAction, WorkflowApproval } from "@miyko/contracts";
 import { db } from "../../lib/database.js";
-import { conflict, forbidden, notFound } from "../../lib/errors.js";
+import { conflict, notFound } from "../../lib/errors.js";
 import { storeProviderService } from "../../integrations/store-providers/store-provider.service.js";
 
 type WorkflowRow = typeof workflows.$inferSelect;
@@ -83,8 +83,6 @@ export class WorkflowsService {
     const workflow = await db.query.workflows.findFirst({ where: and(eq(workflows.id, workflowId), eq(workflows.householdId, context.household.id)) });
     if (!workflow) throw notFound("Workflow");
     if (["succeeded", "failed", "cancelled"].includes(workflow.status)) throw conflict("Workflow is already closed");
-    if (["approve", "decline"].includes(action.type) && context.membership.role !== "owner") throw forbidden();
-
     const result = await db.transaction(async (tx) => {
       const now = new Date();
       const existing = await tx.query.outboxEvents.findFirst({
