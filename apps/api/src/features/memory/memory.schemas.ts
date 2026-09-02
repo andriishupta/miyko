@@ -1,6 +1,5 @@
 import { z } from 'zod'
 
-export const memoryQuerySchema = z.object({ memberId: z.string().regex(/^user-[a-z0-9-]+$/).optional(), runId: z.string().regex(/^run-[a-z0-9-]+$/).optional() }).strict()
-export const memoryWriteSchema = z.object({ text: z.string().min(1).max(500), memberId: z.string().regex(/^user-[a-z0-9-]+$/).nullable().optional(), runId: z.string().regex(/^run-[a-z0-9-]+$/).nullable().optional(), source: z.enum(['feedback', 'audio', 'order']), confirmed: z.boolean().optional() }).strict()
-export const feedbackSchema = z.object({ proposalId: z.string().regex(/^proposal-[a-z0-9-]+$/).nullable().optional(), text: z.string().min(1).max(500), sufficient: z.boolean().optional(), unusedProducts: z.array(z.string().regex(/^product-[a-z0-9-]+$/)).max(50).optional() }).strict()
-
+export const memoryQuerySchema = z.object({ memberId: z.string().uuid().optional(), runId: z.string().uuid().optional() }).strict()
+export const memoryWriteSchema = z.object({ text: z.string().min(1).max(500), memberId: z.string().uuid().nullable().optional(), runId: z.string().uuid().nullable().optional(), source: z.enum(['feedback', 'audio', 'order']), confirmed: z.boolean().optional() }).strict()
+export const feedbackSchema = z.object({ mealPlanItemId: z.string().uuid().nullable().optional(), orderId: z.string().uuid().nullable().optional(), kind: z.enum(['quantity', 'leftover', 'liked', 'repeat', 'general']), subject: z.string().max(200).nullable().optional(), value: z.record(z.unknown()) }).strict()

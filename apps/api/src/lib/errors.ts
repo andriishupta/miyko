@@ -16,4 +16,6 @@ export const forbidden = () => new AppError('FORBIDDEN', 'Insufficient permissio
 export const notFound = (resource = 'Resource') => new AppError('NOT_FOUND', `${resource} not found`, 404)
 export const conflict = (message = 'Resource state conflict') => new AppError('CONFLICT', message, 409)
 export const tooManyRequests = () => new AppError('RATE_LIMITED', 'Too many requests', 429)
-
+export const providerNotConnected = () => new AppError('PROVIDER_NOT_CONNECTED', 'Store provider connection required', 409)
+export const providerReauthorizationRequired = () => new AppError('PROVIDER_REAUTHORIZATION_REQUIRED', 'Store provider authorization required', 401)
+export const providerCapabilityUnsupported = () => new AppError('PROVIDER_CAPABILITY_UNSUPPORTED', 'Store provider capability is unavailable', 501)

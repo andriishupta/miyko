@@ -1,7 +1,7 @@
 CREATE TYPE "public"."account_status" AS ENUM('active', 'suspended', 'deactivated');--> statement-breakpoint
 CREATE TYPE "public"."delivery_status" AS ENUM('pending', 'scheduled', 'in_transit', 'delivered', 'cancelled', 'failed');--> statement-breakpoint
 CREATE TYPE "public"."feedback_kind" AS ENUM('quantity', 'leftover', 'liked', 'repeat', 'general');--> statement-breakpoint
-CREATE TYPE "public"."household_role" AS ENUM('owner', 'admin', 'member');--> statement-breakpoint
+CREATE TYPE "public"."household_role" AS ENUM('owner', 'admin', 'editor', 'viewer');--> statement-breakpoint
 CREATE TYPE "public"."intent_source" AS ENUM('text', 'audio');--> statement-breakpoint
 CREATE TYPE "public"."intent_status" AS ENUM('active', 'planned', 'completed', 'cancelled');--> statement-breakpoint
 CREATE TYPE "public"."invitation_status" AS ENUM('pending', 'accepted', 'declined', 'expired', 'revoked');--> statement-breakpoint
@@ -101,7 +101,7 @@ CREATE TABLE "household_invitations" (
 	"inviter_id" uuid NOT NULL,
 	"invitee_user_id" uuid,
 	"invitee_email" varchar(320),
-	"role" "household_role" DEFAULT 'member' NOT NULL,
+	"role" "household_role" DEFAULT 'viewer' NOT NULL,
 	"can_make_decisions" boolean DEFAULT false NOT NULL,
 	"token_hash" text NOT NULL,
 	"status" "invitation_status" DEFAULT 'pending' NOT NULL,
@@ -117,15 +117,14 @@ CREATE TABLE "household_members" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"household_id" uuid NOT NULL,
 	"user_id" uuid NOT NULL,
-	"role" "household_role" DEFAULT 'member' NOT NULL,
+	"role" "household_role" DEFAULT 'viewer' NOT NULL,
 	"can_make_decisions" boolean DEFAULT false NOT NULL,
 	"status" "membership_status" DEFAULT 'active' NOT NULL,
 	"joined_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"removed_at" timestamp with time zone,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "household_members_removed_at_consistency" CHECK (("household_members"."status" = 'active' AND "household_members"."removed_at" IS NULL) OR ("household_members"."status" = 'removed' AND "household_members"."removed_at" IS NOT NULL)),
-	CONSTRAINT "household_members_owner_decision_consistency" CHECK ("household_members"."role" <> 'owner' OR "household_members"."can_make_decisions" = true)
+	CONSTRAINT "household_members_removed_at_consistency" CHECK (("household_members"."status" = 'active' AND "household_members"."removed_at" IS NULL) OR ("household_members"."status" = 'removed' AND "household_members"."removed_at" IS NOT NULL))
 );
 --> statement-breakpoint
 ALTER TABLE "household_members" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
@@ -598,52 +597,32 @@ CREATE INDEX "user_sessions_user_active_idx" ON "user_sessions" USING btree ("us
 CREATE INDEX "user_sessions_expiry_idx" ON "user_sessions" USING btree ("expires_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "users_normalized_email_uq" ON "users" USING btree ("normalized_email");--> statement-breakpoint
 CREATE INDEX "users_status_idx" ON "users" USING btree ("status");--> statement-breakpoint
--- RLS helper functions are part of the initial schema because Drizzle policies
--- can reference SQL functions but cannot declare SECURITY DEFINER functions.
 CREATE OR REPLACE FUNCTION public.miyko_current_user_id()
 RETURNS uuid
-LANGUAGE sql
-STABLE
-SECURITY INVOKER
-SET search_path = pg_catalog
+LANGUAGE sql STABLE SET search_path = pg_catalog
 AS $$
-  SELECT NULLIF(current_setting('app.user_id', true), '')::uuid;
+  SELECT nullif(current_setting('app.user_id', true), '')::uuid
 $$;--> statement-breakpoint
 CREATE OR REPLACE FUNCTION public.miyko_is_household_member(target_household_id uuid)
 RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = pg_catalog
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog
 AS $$
   SELECT EXISTS (
-    SELECT 1
-    FROM public.household_members AS hm
-    WHERE hm.household_id = target_household_id
-      AND hm.user_id = public.miyko_current_user_id()
-      AND hm.status = 'active'
-  );
+    SELECT 1 FROM public.household_members member
+    WHERE member.household_id = target_household_id
+      AND member.user_id = public.miyko_current_user_id()
+      AND member.status = 'active'
+  )
 $$;--> statement-breakpoint
 CREATE OR REPLACE FUNCTION public.miyko_can_bootstrap_household(target_household_id uuid)
 RETURNS boolean
-LANGUAGE sql
-STABLE
-SECURITY DEFINER
-SET search_path = pg_catalog
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog
 AS $$
-  SELECT EXISTS (
-    SELECT 1
-    FROM public.households AS h
-    WHERE h.id = target_household_id
-      AND h.owner_id = public.miyko_current_user_id()
-  )
-  AND NOT EXISTS (
-    SELECT 1
-    FROM public.household_members AS hm
-    WHERE hm.household_id = target_household_id
-      AND hm.role = 'owner'
-      AND hm.status = 'active'
-  );
+  SELECT public.miyko_current_user_id() IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM public.household_members member
+      WHERE member.household_id = target_household_id AND member.status = 'active'
+    )
 $$;--> statement-breakpoint
 CREATE POLICY "audit_logs_select" ON "audit_logs" AS PERMISSIVE FOR SELECT TO public USING (public.miyko_is_household_member("audit_logs"."household_id"));--> statement-breakpoint
 CREATE POLICY "audit_logs_insert" ON "audit_logs" AS PERMISSIVE FOR INSERT TO public WITH CHECK (public.miyko_is_household_member("audit_logs"."household_id"));--> statement-breakpoint

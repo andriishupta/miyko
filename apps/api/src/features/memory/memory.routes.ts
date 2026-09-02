@@ -4,10 +4,9 @@ import { feedbackSchema, memoryQuerySchema, memoryWriteSchema } from './memory.s
 import { memoryService } from './memory.service.js'
 
 export const memoryRoutes = new Hono()
-memoryRoutes.get('/', (c) => {
+memoryRoutes.get('/', async (c) => {
   const query = parseQuery(c, memoryQuerySchema)
-  return c.json({ data: memoryService.read(c.get('requestContext'), query.memberId, query.runId) })
+  return c.json({ data: await memoryService.read(c.get('requestContext'), query.memberId, query.runId) })
 })
-memoryRoutes.post('/', async (c) => c.json({ data: memoryService.write(c.get('requestContext'), await parseJson(c, memoryWriteSchema)) }, 201))
-memoryRoutes.post('/feedback', async (c) => c.json({ data: memoryService.feedback(c.get('requestContext'), await parseJson(c, feedbackSchema)) }, 201))
-
+memoryRoutes.post('/', async (c) => c.json({ data: await memoryService.write(c.get('requestContext'), await parseJson(c, memoryWriteSchema)) }, 201))
+memoryRoutes.post('/feedback', async (c) => c.json({ data: await memoryService.feedback(c.get('requestContext'), await parseJson(c, feedbackSchema)) }, 201))

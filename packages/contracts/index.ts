@@ -10,7 +10,15 @@ export type ISODateString = string;
 export type CurrencyCode = "UAH";
 
 export type AccountStatus = "active" | "suspended" | "deactivated";
-export type HouseholdRole = "owner" | "admin" | "member";
+export type ProviderKind = "store" | "delivery";
+export type ProviderStatus = "active" | "inactive";
+export type ProviderAuthMethod = "oauth" | "password" | "api_key" | "mcp";
+export type ProviderAccountStatus =
+  | "active"
+  | "expired"
+  | "revoked"
+  | "reconnect_required";
+export type HouseholdRole = "owner" | "admin" | "editor" | "viewer";
 export type MembershipStatus = "active" | "removed";
 export type InvitationStatus =
   | "pending"
@@ -108,9 +116,67 @@ export type User = {
 
 export type AuthUser = Pick<User, "id" | "email" | "displayName">;
 
+export type Provider = {
+  id: UUID;
+  name: string;
+  slug: string;
+  kind: ProviderKind;
+  status: ProviderStatus;
+  capabilities: string[];
+};
+
+/** Public view of a connected provider account; secret references stay API-side. */
+export type UserProviderAccount = {
+  id: UUID;
+  providerId: UUID;
+  providerSubject: string | null;
+  accountLogin: string | null;
+  authMethod: ProviderAuthMethod;
+  status: ProviderAccountStatus;
+  scopes: string[];
+  accessTokenExpiresAt: ISODateString | null;
+  refreshTokenExpiresAt: ISODateString | null;
+  lastUsedAt: ISODateString | null;
+};
+
+export type ProviderAuthRequest = {
+  login: string;
+  password: string;
+};
+
+export type ProviderConnectionResponse = {
+  provider: Provider;
+  account: UserProviderAccount;
+};
+
+export type ProviderAccountsResponse = {
+  items: Array<UserProviderAccount & { provider: Provider }>;
+};
+
+export type ProviderOrder = {
+  id: string;
+  status: string;
+  total: number;
+  currency: CurrencyCode;
+  placedAt: ISODateString | null;
+};
+
+export type ProviderOrdersResponse = {
+  provider: Provider;
+  items: ProviderOrder[];
+};
+
 export type LoginRequest = {
   email: string;
   password: string;
+};
+
+export type RegisterRequest = {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  displayName?: string | null;
 };
 
 export type AuthSession = {
@@ -133,7 +199,6 @@ export type HouseholdMember = {
   householdId: UUID;
   userId: UUID;
   role: HouseholdRole;
-  canMakeDecisions: boolean;
   status: MembershipStatus;
   joinedAt: ISODateString;
   removedAt: ISODateString | null;
@@ -142,7 +207,7 @@ export type HouseholdMember = {
 
 export type Membership = Pick<
   HouseholdMember,
-  "id" | "householdId" | "userId" | "role" | "canMakeDecisions" | "status"
+  "id" | "householdId" | "userId" | "role" | "status"
 >;
 
 export type HouseholdInvitation = {
@@ -152,7 +217,6 @@ export type HouseholdInvitation = {
   inviteeUserId: UUID | null;
   inviteeEmail: string | null;
   role: Exclude<HouseholdRole, "owner">;
-  canMakeDecisions: boolean;
   status: InvitationStatus;
   expiresAt: ISODateString;
   acceptedAt: ISODateString | null;
@@ -328,6 +392,7 @@ export type Delivery = {
   householdId: UUID;
   orderId: UUID;
   mealPlanItemId: UUID | null;
+  deliveryProviderId: UUID | null;
   providerDeliveryId: string | null;
   scheduledFrom: ISODateString | null;
   scheduledTo: ISODateString | null;
@@ -402,10 +467,10 @@ export type RequestContext = {
 };
 
 export type CreateHouseholdRequest = { name: string };
+export type CreateHouseholdResponse = { household: Household; membership: Membership };
 export type InviteMemberRequest = {
   email: string;
   role: Exclude<HouseholdRole, "owner">;
-  canMakeDecisions?: boolean;
 };
 export type CreateFoodIntentRequest = {
   text: string;
@@ -442,6 +507,36 @@ export type FeedbackRequest = {
   subject?: string | null;
   value: Record<string, unknown>;
 };
+
+export type DashboardEvent = {
+  id: UUID;
+  type: MealPlanItemType;
+  title: string;
+  scheduledFor: ISODateString;
+  status: string;
+};
+
+export type DashboardResponse = {
+  household: Household;
+  date: string;
+  upcomingEvents: DashboardEvent[];
+  planning: { active: boolean; title: string | null; proposalId: UUID | null; status: string };
+  latestOrder: Order | null;
+  latestDelivery: { id: UUID; orderId: UUID; status: DeliveryStatus; scheduledFor: ISODateString | null; total: number; currency: CurrencyCode } | null;
+  householdSummary: { memberCount: number; connectedShoppingAccounts: number; pendingApprovals: number };
+  input: { audioEnabled: boolean; chatEnabled: boolean };
+};
+
+export type DeliveryDetailsResponse = {
+  delivery: Delivery;
+  order: Order | null;
+  mealPlanItem: MealPlanItem | null;
+};
+
+export type ProductSearchResponse = { items: Product[]; source: string };
+export type ProductResponse = { product: Product; source: string };
+export type ProductReplacementsResponse = { productId: UUID; items: Product[]; source: string };
+export type InvitationCreateResponse = { invitation: HouseholdInvitation; token: string };
 
 export type ApiError = {
   code: string;

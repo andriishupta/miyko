@@ -45,9 +45,9 @@ export function SectionTitle({ title, action, onAction }: { title: string; actio
   return <View style={styles.sectionHeading}><MiykoText variant="section">{title}</MiykoText>{action && onAction && <Button mode="text" compact onPress={onAction} textColor={theme.accent} contentStyle={styles.sectionActionContent} labelStyle={styles.sectionActionLabel} uppercase={false}>{action}</Button>}<View style={[styles.headingRule, { backgroundColor: theme.border }]} /></View>;
 }
 
-export function PrimaryButton({ label, onPress, loading = false, icon }: { label: string; onPress: () => void; loading?: boolean; icon?: SymbolName }) {
+export function PrimaryButton({ label, onPress, loading = false, disabled = false, icon }: { label: string; onPress: () => void; loading?: boolean; disabled?: boolean; icon?: SymbolName }) {
   const theme = useTheme();
-  return <Button accessibilityRole="button" mode="contained" onPress={onPress} disabled={loading} loading={loading} buttonColor={theme.accent} textColor={theme.accentContrast} icon={icon ? () => <AppIcon name={icon} size={18} color={theme.accentContrast} /> : undefined} contentStyle={styles.buttonContent} style={styles.primaryButton} labelStyle={styles.buttonLabel} uppercase={false}>{loading ? 'Opening…' : label}</Button>;
+  return <Button accessibilityRole="button" mode="contained" onPress={onPress} disabled={loading || disabled} loading={loading} buttonColor={theme.accent} textColor={theme.accentContrast} icon={icon ? () => <AppIcon name={icon} size={18} color={theme.accentContrast} /> : undefined} contentStyle={styles.buttonContent} style={styles.primaryButton} labelStyle={styles.buttonLabel} uppercase={false}>{loading ? 'Opening…' : label}</Button>;
 }
 
 export function SecondaryButton({ label, onPress, icon }: { label: string; onPress: () => void; icon?: SymbolName }) {
@@ -76,9 +76,9 @@ export function EmptyState({ title, detail }: { title: string; detail: string })
   return <Surface style={[styles.emptyState, { borderColor: theme.border }]}><View style={[styles.emptyIcon, { backgroundColor: theme.backgroundSelected }]}><AppIcon name="calendar" size={22} color={theme.accent} /></View><MiykoText variant="section">{title}</MiykoText><MiykoText variant="body" color="textSecondary" style={styles.centerText}>{detail}</MiykoText></Surface>;
 }
 
-export function Field({ label, placeholder, value, onChangeText }: { label: string; placeholder: string; value: string; onChangeText: (value: string) => void }) {
+export function Field({ label, placeholder, value, onChangeText, secureTextEntry = false }: { label: string; placeholder: string; value: string; onChangeText: (value: string) => void; secureTextEntry?: boolean }) {
   const theme = useTheme();
-  return <PaperTextInput mode="outlined" label={label} value={value} onChangeText={onChangeText} placeholder={placeholder} textColor={theme.text} outlineColor={theme.border} activeOutlineColor={theme.accent} style={styles.input} />;
+  return <PaperTextInput mode="outlined" label={label} value={value} onChangeText={onChangeText} placeholder={placeholder} secureTextEntry={secureTextEntry} textColor={theme.text} outlineColor={theme.border} activeOutlineColor={theme.accent} style={styles.input} />;
 }
 
 export function ScreenScroll({ children, bottomInset = 32, contentContainerStyle, ...props }: ComponentProps<typeof ScrollView> & { bottomInset?: number }) {

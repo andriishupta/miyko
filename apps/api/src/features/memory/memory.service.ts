@@ -1,24 +1,51 @@
-import { forbidden } from '../../lib/errors.js'
-import { memories, outbox } from '../../lib/mock-store.js'
-import type { Memory, RequestContext } from '../../lib/types.js'
+import { and, eq, isNull, or } from 'drizzle-orm'
+import { feedback, householdMembers, mealPlanItems, memorySyncRecords, orders, outboxEvents, planningRuns } from '@miyko/database/schema'
+import type { FeedbackRequest, MemoryReference, RequestContext } from '@miyko/contracts'
+import { db } from '../../lib/database.js'
+import { forbidden, notFound } from '../../lib/errors.js'
+import { toContractFeedback } from '../../lib/serializers.js'
+
+const toMemoryReference = (row: typeof memorySyncRecords.$inferSelect): MemoryReference => ({ id: row.id, householdId: row.householdId, memberId: row.memberId, planningRunId: row.planningRunId, scope: row.scope, namespace: row.namespace, externalMemoryId: row.externalMemoryId, lastSyncedAt: row.lastSyncedAt?.toISOString() ?? null })
 
 export class MemoryService {
-  read(context: RequestContext, memberId?: string, runId?: string) {
-    if (memberId && memberId !== context.user.id && context.membership.role !== 'owner') throw forbidden()
-    return memories.filter((memory) => memory.householdId === context.household.id && (!memory.memberId || memory.memberId === context.user.id || context.membership.role === 'owner') && (!memberId || memory.memberId === memberId) && (!runId || memory.runId === runId))
+  async read(context: RequestContext, memberId?: string, runId?: string) {
+    if (memberId && memberId !== context.membership.id && context.membership.role !== 'owner' && context.membership.role !== 'admin') throw forbidden()
+    const visibility = context.membership.role === 'owner' || context.membership.role === 'admin' ? undefined : or(isNull(memorySyncRecords.memberId), eq(memorySyncRecords.memberId, context.membership.id))
+    const rows = await db.query.memorySyncRecords.findMany({ where: and(eq(memorySyncRecords.householdId, context.household.id), visibility, memberId ? eq(memorySyncRecords.memberId, memberId) : undefined, runId ? eq(memorySyncRecords.planningRunId, runId) : undefined) })
+    return rows.map(toMemoryReference)
   }
 
-  write(context: RequestContext, input: { text: string; memberId?: string | null; runId?: string | null; source: Memory['source']; confirmed?: boolean }) {
-    if (input.memberId && input.memberId !== context.user.id && context.membership.role !== 'owner') throw forbidden()
-    const memory: Memory = { id: `memory-${Date.now()}`, householdId: context.household.id, memberId: input.memberId ?? null, runId: input.runId ?? null, text: input.text, source: input.source, confirmed: input.confirmed ?? false, createdAt: new Date().toISOString() }
-    memories.push(memory)
-    return memory
+  async write(context: RequestContext, input: { text: string; memberId?: string | null; runId?: string | null; source: 'feedback' | 'audio' | 'order'; confirmed?: boolean }) {
+    if (input.memberId && input.memberId !== context.membership.id && context.membership.role !== 'owner' && context.membership.role !== 'admin') throw forbidden()
+    if (input.memberId) {
+      const member = await db.query.householdMembers.findFirst({ where: and(eq(householdMembers.id, input.memberId), eq(householdMembers.householdId, context.household.id), eq(householdMembers.status, 'active')) })
+      if (!member) throw notFound('Household member')
+    }
+    if (input.runId) {
+      const run = await db.query.planningRuns.findFirst({ where: and(eq(planningRuns.id, input.runId), eq(planningRuns.householdId, context.household.id)) })
+      if (!run) throw notFound('Planning run')
+    }
+    const scope = input.runId ? 'planning_run' : input.memberId ? 'member' : 'household'
+    const namespace = input.runId ? `run:${input.runId}` : input.memberId ? `member:${input.memberId}` : `household:${context.household.id}`
+    const row = await db.insert(memorySyncRecords).values({ householdId: context.household.id, memberId: scope === 'member' ? input.memberId : null, planningRunId: scope === 'planning_run' ? input.runId : null, scope, namespace, metadata: { text: input.text, source: input.source, confirmed: input.confirmed ?? false } }).onConflictDoUpdate({ target: memorySyncRecords.namespace, set: { metadata: { text: input.text, source: input.source, confirmed: input.confirmed ?? false }, updatedAt: new Date() } }).returning()
+    return toMemoryReference(row[0])
   }
 
-  feedback(context: RequestContext, input: { proposalId?: string | null; text: string; sufficient?: boolean; unusedProducts?: string[] }) {
-    const memory = this.write(context, { text: input.text, source: 'feedback', confirmed: false })
-    outbox.push({ id: `outbox-${Date.now()}`, householdId: context.household.id, type: 'feedback.created', aggregateId: input.proposalId ?? memory.id, status: 'pending', attempts: 0, lastError: null, processedAt: null, createdAt: new Date().toISOString() })
-    return { memory, followUpScheduled: true }
+  async feedback(context: RequestContext, input: FeedbackRequest) {
+    if (input.orderId) {
+      const order = await db.query.orders.findFirst({ where: and(eq(orders.id, input.orderId), eq(orders.householdId, context.household.id)) })
+      if (!order) throw notFound('Order')
+    }
+    if (input.mealPlanItemId) {
+      const item = await db.query.mealPlanItems.findFirst({ where: and(eq(mealPlanItems.id, input.mealPlanItemId), eq(mealPlanItems.householdId, context.household.id)) })
+      if (!item) throw notFound('Meal plan item')
+    }
+    const result = await db.transaction(async (tx) => {
+      const rows = await tx.insert(feedback).values({ householdId: context.household.id, memberId: context.membership.id, mealPlanItemId: input.mealPlanItemId ?? null, orderId: input.orderId ?? null, kind: input.kind, subject: input.subject ?? null, value: input.value }).returning()
+      await tx.insert(outboxEvents).values({ householdId: context.household.id, aggregateType: 'feedback', aggregateId: rows[0].id, eventType: 'feedback.created', version: 1, payload: { feedbackId: rows[0].id } })
+      return rows[0]
+    })
+    return toContractFeedback(result)
   }
 }
 export const memoryService = new MemoryService()

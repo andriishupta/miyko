@@ -1,6 +1,6 @@
 # MiyKo mobile app
 
-This is the Expo / React Native mock scaffold for MiyKo. It contains the local UI loop from Login to Home, household collaboration, delivery proposals and settings. No API, database, authentication provider or Silpo account is connected yet.
+This is the Expo / React Native app for MiyKo. It uses the existing Hono API and shared `@miyko/contracts` types for login, onboarding, providers, dashboard, household, deliveries, orders and settings. Relational API data is database-backed; audio, Mem0 and Silpo MCP remain scaffold adapters.
 
 ## Get started
 
@@ -10,7 +10,16 @@ This is the Expo / React Native mock scaffold for MiyKo. It contains the local U
    npm install
    ```
 
-2. Start the app
+2. Configure the API URL
+
+   ```bash
+   cp .env.example .env.local
+   # Set EXPO_PUBLIC_API_URL to the reachable API URL.
+   ```
+
+   For a physical phone, use the development machine LAN address rather than `localhost`.
+
+3. Start the app
 
    ```bash
    npx expo start
@@ -24,6 +33,8 @@ In the output, you'll find options to open the app in a
 - [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
 
 You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+
+API limitations that affect the current screens are recorded in [API_GAPS.md](./API_GAPS.md).
 
 ## Get a fresh project
 

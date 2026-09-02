@@ -1,13 +1,12 @@
 import type { Context } from 'hono'
-import type { RequestContext, User } from '../lib/types.js'
+import type { AuthUser, RequestContext } from '@miyko/contracts'
 
 declare module 'hono' {
   interface ContextVariableMap {
-    user: User
+    user: AuthUser
     requestId: string
     requestContext: RequestContext
   }
 }
 
 export type AppContext = Context
-

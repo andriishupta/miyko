@@ -1,7 +1,6 @@
 import { relations, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
-  boolean,
   check,
   index,
   integer,
@@ -27,9 +26,13 @@ const optionalTimestampColumn = (name: string) =>
   timestamp(name, { withTimezone: true, mode: "date" });
 
 const currentUserId = () => sql`public.miyko_current_user_id()`;
+const currentUserEmail = () => sql`public.miyko_current_user_email()`;
 
 const isHouseholdMember = (householdId: AnyPgColumn) =>
   sql`public.miyko_is_household_member(${householdId})`;
+
+const canAcceptHouseholdInvitation = (householdId: AnyPgColumn) =>
+  sql`public.miyko_can_accept_household_invitation(${householdId})`;
 
 const householdCrudPolicies = (name: string, householdId: AnyPgColumn) => [
   pgPolicy(`${name}_select`, {
@@ -60,7 +63,8 @@ export const accountStatusEnum = pgEnum("account_status", [
 export const householdRoleEnum = pgEnum("household_role", [
   "owner",
   "admin",
-  "member",
+  "editor",
+  "viewer",
 ]);
 
 export const membershipStatusEnum = pgEnum("membership_status", [
@@ -123,6 +127,17 @@ export const providerAccountStatusEnum = pgEnum("provider_account_status", [
   "expired",
   "revoked",
   "reconnect_required",
+]);
+
+export const providerKindEnum = pgEnum("provider_kind", ["store", "delivery"]);
+
+export const providerStatusEnum = pgEnum("provider_status", ["active", "inactive"]);
+
+export const providerAuthMethodEnum = pgEnum("provider_auth_method", [
+  "oauth",
+  "password",
+  "api_key",
+  "mcp",
 ]);
 
 export const proposalStatusEnum = pgEnum("proposal_status", [
@@ -332,8 +347,7 @@ export const householdMembers = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    role: householdRoleEnum("role").notNull().default("member"),
-    canMakeDecisions: boolean("can_make_decisions").notNull().default(false),
+    role: householdRoleEnum("role").notNull().default("viewer"),
     status: membershipStatusEnum("status").notNull().default("active"),
     joinedAt: timestampColumn("joined_at"),
     removedAt: optionalTimestampColumn("removed_at"),
@@ -356,10 +370,6 @@ export const householdMembers = pgTable(
       "household_members_removed_at_consistency",
       sql`(${table.status} = 'active' AND ${table.removedAt} IS NULL) OR (${table.status} = 'removed' AND ${table.removedAt} IS NOT NULL)`,
     ),
-    check(
-      "household_members_owner_decision_consistency",
-      sql`${table.role} <> 'owner' OR ${table.canMakeDecisions} = true`,
-    ),
     pgPolicy("household_members_select", {
       for: "select",
       using: sql`${table.userId} = ${currentUserId()} OR ${isHouseholdMember(table.householdId)}`,
@@ -368,6 +378,7 @@ export const householdMembers = pgTable(
       for: "insert",
       withCheck: sql`(
         ${isHouseholdMember(table.householdId)}
+        OR ${canAcceptHouseholdInvitation(table.householdId)}
         OR (
           public.miyko_can_bootstrap_household(${table.householdId})
           AND ${table.userId} = ${currentUserId()}
@@ -376,8 +387,8 @@ export const householdMembers = pgTable(
     }),
     pgPolicy("household_members_update", {
       for: "update",
-      using: isHouseholdMember(table.householdId),
-      withCheck: isHouseholdMember(table.householdId),
+      using: sql`${isHouseholdMember(table.householdId)} OR (${table.userId} = ${currentUserId()} AND ${canAcceptHouseholdInvitation(table.householdId)})`,
+      withCheck: sql`${isHouseholdMember(table.householdId)} OR (${table.userId} = ${currentUserId()} AND ${canAcceptHouseholdInvitation(table.householdId)})`,
     }),
     pgPolicy("household_members_delete", {
       for: "delete",
@@ -400,8 +411,7 @@ export const householdInvitations = pgTable(
       onDelete: "set null",
     }),
     inviteeEmail: varchar("invitee_email", { length: 320 }),
-    role: householdRoleEnum("role").notNull().default("member"),
-    canMakeDecisions: boolean("can_make_decisions").notNull().default(false),
+    role: householdRoleEnum("role").notNull().default("viewer"),
     tokenHash: text("token_hash").notNull(),
     status: invitationStatusEnum("status").notNull().default("pending"),
     expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
@@ -422,7 +432,7 @@ export const householdInvitations = pgTable(
     ),
     pgPolicy("household_invitations_select", {
       for: "select",
-      using: sql`${isHouseholdMember(table.householdId)} OR ${table.inviteeUserId} = ${currentUserId()}`,
+      using: sql`${isHouseholdMember(table.householdId)} OR ${table.inviteeUserId} = ${currentUserId()} OR ${table.inviteeEmail} = ${currentUserEmail()}`,
     }),
     pgPolicy("household_invitations_insert", {
       for: "insert",
@@ -430,8 +440,8 @@ export const householdInvitations = pgTable(
     }),
     pgPolicy("household_invitations_update", {
       for: "update",
-      using: sql`${isHouseholdMember(table.householdId)} OR ${table.inviteeUserId} = ${currentUserId()}`,
-      withCheck: sql`${isHouseholdMember(table.householdId)} OR ${table.inviteeUserId} = ${currentUserId()}`,
+      using: sql`${isHouseholdMember(table.householdId)} OR ${table.inviteeUserId} = ${currentUserId()} OR ${table.inviteeEmail} = ${currentUserEmail()}`,
+      withCheck: sql`${isHouseholdMember(table.householdId)} OR ${table.inviteeUserId} = ${currentUserId()} OR ${table.inviteeEmail} = ${currentUserEmail()}`,
     }),
     pgPolicy("household_invitations_delete", {
       for: "delete",
@@ -441,11 +451,14 @@ export const householdInvitations = pgTable(
 ).enableRLS();
 
 export const shoppingProviders = pgTable(
-  "shopping_providers",
+  "providers",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     name: varchar("name", { length: 80 }).notNull(),
     slug: varchar("slug", { length: 80 }).notNull(),
+    kind: providerKindEnum("kind").notNull().default("store"),
+    status: providerStatusEnum("status").notNull().default("active"),
+    capabilities: text("capabilities").array().notNull().default(sql`ARRAY[]::text[]`),
     createdAt: timestampColumn("created_at"),
     updatedAt: timestampColumn("updated_at"),
   },
@@ -454,6 +467,64 @@ export const shoppingProviders = pgTable(
     uniqueIndex("shopping_providers_name_uq").on(table.name),
   ],
 );
+
+/**
+ * A user's account at an external provider. Credentials are references into
+ * server-side secret storage; raw passwords and access tokens never belong in
+ * this table or in shared contracts.
+ */
+export const userProviderAccounts = pgTable(
+  "user_providers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    providerId: uuid("provider_id")
+      .notNull()
+      .references(() => shoppingProviders.id, { onDelete: "restrict" }),
+    providerSubject: varchar("provider_subject", { length: 255 }),
+    accountLogin: varchar("account_login", { length: 320 }),
+    authMethod: providerAuthMethodEnum("auth_method").notNull(),
+    status: providerAccountStatusEnum("status").notNull().default("active"),
+    accessTokenReference: text("access_token_reference"),
+    refreshTokenReference: text("refresh_token_reference"),
+    credentialReference: text("credential_reference"),
+    scopes: text("scopes").array().notNull().default(sql`ARRAY[]::text[]`),
+    accessTokenExpiresAt: optionalTimestampColumn("access_token_expires_at"),
+    refreshTokenExpiresAt: optionalTimestampColumn("refresh_token_expires_at"),
+    lastUsedAt: optionalTimestampColumn("last_used_at"),
+    metadata: jsonb("metadata").$type<JsonObject>(),
+    createdAt: timestampColumn("created_at"),
+    updatedAt: timestampColumn("updated_at"),
+  },
+  (table) => [
+    uniqueIndex("user_providers_user_provider_subject_uq").on(
+      table.userId,
+      table.providerId,
+      table.providerSubject,
+    ),
+    index("user_providers_user_status_idx").on(table.userId, table.status),
+    index("user_providers_provider_status_idx").on(table.providerId, table.status),
+    pgPolicy("user_providers_select_own", {
+      for: "select",
+      using: sql`${table.userId} = ${currentUserId()}`,
+    }),
+    pgPolicy("user_providers_insert_own", {
+      for: "insert",
+      withCheck: sql`${table.userId} = ${currentUserId()}`,
+    }),
+    pgPolicy("user_providers_update_own", {
+      for: "update",
+      using: sql`${table.userId} = ${currentUserId()}`,
+      withCheck: sql`${table.userId} = ${currentUserId()}`,
+    }),
+    pgPolicy("user_providers_delete_own", {
+      for: "delete",
+      using: sql`${table.userId} = ${currentUserId()}`,
+    }),
+  ],
+).enableRLS();
 
 export const providerProducts = pgTable(
   "provider_products",
@@ -859,15 +930,14 @@ export const connectedProviderAccounts = pgTable(
     providerId: uuid("provider_id")
       .notNull()
       .references(() => shoppingProviders.id, { onDelete: "restrict" }),
+    userProviderAccountId: uuid("user_provider_account_id").references(
+      () => userProviderAccounts.id,
+      { onDelete: "set null" },
+    ),
     authorizedByMemberId: uuid("authorized_by_member_id")
       .notNull()
       .references(() => householdMembers.id, { onDelete: "restrict" }),
-    accessTokenReference: text("access_token_reference").notNull(),
-    refreshTokenReference: text("refresh_token_reference").notNull(),
-    scopes: text("scopes").array().notNull().default(sql`ARRAY[]::text[]`),
     status: providerAccountStatusEnum("status").notNull().default("active"),
-    accessTokenExpiresAt: optionalTimestampColumn("access_token_expires_at"),
-    refreshTokenExpiresAt: optionalTimestampColumn("refresh_token_expires_at"),
     revokedAt: optionalTimestampColumn("revoked_at"),
     lastSyncedAt: optionalTimestampColumn("last_synced_at"),
     createdAt: timestampColumn("created_at"),
@@ -879,6 +949,7 @@ export const connectedProviderAccounts = pgTable(
       table.householdId,
       table.status,
     ),
+    index("connected_provider_accounts_user_account_idx").on(table.userProviderAccountId),
     uniqueIndex("connected_provider_accounts_household_provider_member_uq").on(
       table.householdId,
       table.providerId,
@@ -996,6 +1067,10 @@ export const deliveries = pgTable(
     mealPlanItemId: uuid("meal_plan_item_id").references(() => mealPlanItems.id, {
       onDelete: "set null",
     }),
+    deliveryProviderId: uuid("delivery_provider_id").references(
+      () => shoppingProviders.id,
+      { onDelete: "set null" },
+    ),
     providerDeliveryId: varchar("provider_delivery_id", { length: 255 }),
     scheduledFrom: optionalTimestampColumn("scheduled_from"),
     scheduledTo: optionalTimestampColumn("scheduled_to"),
@@ -1011,6 +1086,7 @@ export const deliveries = pgTable(
       table.providerDeliveryId,
     ),
     index("deliveries_household_status_idx").on(table.householdId, table.status),
+    index("deliveries_provider_status_idx").on(table.deliveryProviderId, table.status),
     check(
       "deliveries_scheduled_window_check",
       sql`${table.scheduledTo} IS NULL OR ${table.scheduledFrom} IS NULL OR ${table.scheduledTo} >= ${table.scheduledFrom}`,
@@ -1183,6 +1259,7 @@ export const auditLogs = pgTable(
 export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(userSessions),
   memberships: many(householdMembers),
+  providerAccounts: many(userProviderAccounts),
   ownedHouseholds: many(households),
   sentInvitations: many(householdInvitations, { relationName: "inviter" }),
   receivedInvitations: many(householdInvitations, { relationName: "invitee" }),
@@ -1269,11 +1346,27 @@ export const householdInvitationsRelations = relations(householdInvitations, ({ 
 
 export const shoppingProvidersRelations = relations(shoppingProviders, ({ many }) => ({
   products: many(providerProducts),
+  userAccounts: many(userProviderAccounts),
   connectedAccounts: many(connectedProviderAccounts),
   providerSettings: many(householdProviderSettings),
   orders: many(orders),
   syncEvents: many(providerSyncEvents),
 }));
+
+export const userProviderAccountsRelations = relations(
+  userProviderAccounts,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [userProviderAccounts.userId],
+      references: [users.id],
+    }),
+    provider: one(shoppingProviders, {
+      fields: [userProviderAccounts.providerId],
+      references: [shoppingProviders.id],
+    }),
+    householdConnections: many(connectedProviderAccounts),
+  }),
+);
 
 export const providerProductsRelations = relations(providerProducts, ({ one, many }) => ({
   provider: one(shoppingProviders, {
@@ -1538,6 +1631,10 @@ export const connectedProviderAccountsRelations = relations(
       fields: [connectedProviderAccounts.providerId],
       references: [shoppingProviders.id],
     }),
+    userProviderAccount: one(userProviderAccounts, {
+      fields: [connectedProviderAccounts.userProviderAccountId],
+      references: [userProviderAccounts.id],
+    }),
     authorizedByMember: one(householdMembers, {
       fields: [connectedProviderAccounts.authorizedByMemberId],
       references: [householdMembers.id],
@@ -1618,6 +1715,10 @@ export const deliveriesRelations = relations(deliveries, ({ one }) => ({
     fields: [deliveries.mealPlanItemId],
     references: [mealPlanItems.id],
   }),
+  deliveryProvider: one(shoppingProviders, {
+    fields: [deliveries.deliveryProviderId],
+    references: [shoppingProviders.id],
+  }),
 }));
 
 export const providerSyncEventsRelations = relations(providerSyncEvents, ({ one }) => ({
@@ -1691,6 +1792,7 @@ export const schema = {
   householdMembers,
   householdInvitations,
   shoppingProviders,
+  userProviderAccounts,
   providerProducts,
   productReplacements,
   foodIntents,
@@ -1719,6 +1821,7 @@ export const schema = {
   householdMembersRelations,
   householdInvitationsRelations,
   shoppingProvidersRelations,
+  userProviderAccountsRelations,
   providerProductsRelations,
   productReplacementsRelations,
   foodIntentsRelations,

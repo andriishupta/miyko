@@ -1,123 +1,173 @@
 # AGENTS.md
 
-## Project purpose
+This file contains repository-wide engineering conventions. Product behavior, domain rules, architecture decisions and feature requirements belong in `README.md` and the project documentation.
 
-MiyKo is a mobile household food agent. It remembers food intentions, preferences, restrictions, previous purchases and feedback; coordinates household members; proposes grocery baskets; and updates a real Silpo basket only after explicit owner approval.
+## Working style
 
-The product is a hackathon prototype. Prefer a small, understandable implementation that demonstrates one complete food loop over broad infrastructure or premature abstractions.
+- At the start of every agent session, read this file, `README.md` and the relevant project documentation before taking action.
+- At the end of every session, review whether the work changed a documented decision, contract or workflow and update the existing documentation when needed.
+- Prefer updating an existing `README.md`, PRD or architecture document over creating another document.
+- If a new general document or file is useful but was not explicitly requested, recommend it and ask for permission before creating it.
+- Read the relevant project documentation before changing behavior or architecture.
+- Keep changes focused on the requested outcome.
+- Prefer small, understandable implementations over speculative abstractions.
+- Do not silently change product scope, public contracts or security assumptions.
+- Preserve unrelated user changes.
+- Do not run tests, builds, formatters or other checks automatically unless requested. When useful, provide the command for the owner to run.
+- Avoid destructive Git and filesystem operations.
 
-## Product boundaries
+## Simplicity
 
-- Mobile client: Expo / React Native with TypeScript.
-- API: Hono / TypeScript.
-- Agent workflow: LangGraph.js.
-- Database: PostgreSQL with Row-Level Security (RLS).
-- Long-term memory: Mem0, never the source of truth for authorization or permissions.
-- Shopping integration: official Silpo MCP.
-- Notifications: Expo Notifications and a server-side scheduler.
-- No Docker Compose is required for the current development workflow.
-- Never place Silpo credentials, OAuth tokens, database secrets or model keys in the mobile app.
+- Use the simplest design that satisfies the requirement.
+- Do not add unnecessary layers, dependencies, configuration or validation.
+- Do not add fallback behavior that hides a missing configuration or silently changes behavior.
+- Fail explicitly and safely when a required dependency, configuration value or permission is missing.
+- Keep error handling proportional to the actual risk and domain complexity.
 
-## How to work in this repository
+```ts
+// Good: missing configuration is visible immediately.
+const apiUrl = process.env.API_URL;
+if (!apiUrl) throw new Error('API_URL is required');
 
-1. Read `README.md`, `docs/idea.md` and `docs/prd.md` before making architectural changes.
-2. Keep changes focused on the requested outcome. Do not create extra applications, services or abstractions without a concrete use case.
-3. Follow an Agile loop: define a small vertical slice, implement it, let the owner run the requested manual verification, collect feedback, then refine.
-4. Keep product decisions and security assumptions documented when they affect multiple applications.
-5. Do not run tests, builds, formatters or other checks automatically unless the user asks for them. When useful, provide the exact command for the user to run.
-6. Do not silently change product scope, authentication behavior, database tenancy rules or external integration behavior.
-7. Preserve unrelated user changes. Avoid destructive Git or filesystem operations.
-
-## Suggested repository shape
-
-```text
-apps/
-  mobile/          # Expo / React Native application
-  api/             # Hono API, agent workflow and scheduler
-packages/
-  contracts/       # Shared Zod schemas and API types
-  config/          # Shared TypeScript and tooling configuration
-docs/              # Product and architecture documentation
+// Avoid: silently switching to an unexpected environment.
+const apiUrl = process.env.API_URL ?? 'http://localhost:3000';
 ```
 
-Keep the agent runner, MCP client and scheduler inside the API application until the prototype proves that a separate service is necessary.
+## Code organization
 
-## Security rules
+- Group code by feature when the project has multiple domain features.
+- Keep a feature's routes, schemas, services, types and adapters logically together.
+- Put genuinely shared behavior in `utils`, `lib` or `infrastructure` modules.
+- Do not duplicate common functions across features.
+- Keep route, controller or screen files thin; move reusable logic into focused modules.
+- Avoid creating a new component, helper or service when an existing one already owns that responsibility.
 
-Security is deny-by-default and enforced on the server.
+```text
+features/
+  orders/
+    orders.routes.ts
+    orders.schemas.ts
+    orders.service.ts
+    orders.constants.ts
+lib/
+  dates.ts
+  errors.ts
+  ids.ts
+```
 
-- Only the health endpoint may be unauthenticated. Every other API route requires a valid MiyKo session or access token.
-- Authenticate the user before loading any tenant data. Do not rely on a client-provided `user_id`, `household_id`, role or permission.
-- Authorize every request against current household membership and role. Authentication alone is not authorization.
-- Apply authorization again inside service methods for sensitive reads and every mutation; route middleware is not the only security boundary.
-- Validate all request bodies, query parameters and external tool responses with Zod or an equivalent strict schema.
-- Reject unknown or unsafe input where practical. Use explicit allowlists for actions, roles, status transitions and MCP operations.
-- Require explicit owner approval before any operation that changes a real Silpo basket. Proposal creation and read-only product searches may happen before approval.
-- Keep OAuth access and refresh tokens server-side, encrypted at rest, scoped to the connected household member and never returned to Expo.
-- Store only the minimum receipt and preference data needed for the product. Do not put secrets or raw sensitive payloads into Mem0, logs or error messages.
-- Redact tokens, authorization headers, private personal data and full receipt payloads from logs and traces.
-- Use short, generic error responses at the API boundary. Keep internal details in protected server logs.
-- Configure CORS for known development or production origins. Do not use an unrestricted production wildcard.
-- Protect mutations against replay and accidental duplication where the operation can affect a real basket.
+## Functions and classes
 
-## Multi-tenant data isolation
+- Prefer small functions for transformations, validation and business rules.
+- Prefer pure functions when state is not required.
+- Use classes only when they represent a meaningful stateful boundary, such as a client, repository or service with a lifecycle.
+- Do not create classes only to group static helper functions.
+- Keep constructors and public methods narrow when a class is justified.
 
-The tenant boundary is the household. A user may belong to more than one household, so `user_id` alone is never sufficient to authorize a household resource.
+## TypeScript
 
-- Every household-owned table must carry a non-null `household_id` or be reachable through a relation that is unambiguously scoped to one.
-- PostgreSQL RLS is mandatory for tenant-owned data. Policies must verify the authenticated application identity and household membership.
-- Application queries must include the household scope even when RLS exists. RLS is a safety net, not a reason to omit explicit scoping.
-- Set database request context from trusted server authentication inside a transaction. Never accept arbitrary tenant context from the mobile client.
-- Keep migrations, narrowly controlled service operations and administrative tooling separate from normal user requests. Any RLS bypass must be deliberate, audited and never exposed as a user endpoint.
-- Test or manually verify cross-household access denial for reads, updates, deletes, invitations, plans, receipts and connected Silpo accounts before calling a tenancy feature complete.
-- Do not expose sequential identifiers as the only protection. Use authorization checks regardless of whether IDs are UUIDs.
+- Use strict TypeScript and explicit compiler settings for each runtime package.
+- Prefer inferred types for local values and named types for public boundaries.
+- Avoid `any`; use `unknown` at untrusted boundaries and narrow it through validation.
+- Use enums, literal unions or `as const` objects for finite states instead of repeating string literals.
+- Keep constants in named modules instead of scattering magic numbers and status strings.
+- Do not use type assertions merely to silence compiler errors.
 
-## Memory isolation
+```ts
+export const ORDER_STATUS = {
+  pending: 'pending',
+  approved: 'approved',
+  completed: 'completed',
+} as const;
 
-Mem0 is long-term context, not an authorization database.
+export type OrderStatus = typeof ORDER_STATUS[keyof typeof ORDER_STATUS];
+```
 
-- Shared memories use a household-scoped namespace.
-- Personal memories use a member-scoped namespace and may be retrieved only for an authorized member or an authorized household workflow.
-- Planning-session memories use a run-scoped namespace and must not become shared household memory without an explicit server-side decision.
-- Every retrieval and write must carry the authorized `household_id`; never search global memory for convenience.
-- Never use Mem0 to decide whether a user can access a household, approve a basket or perform an MCP mutation.
-- Minimize sensitive data sent to Mem0 and make important inferred restrictions editable or confirmable by the user.
+## Security and permissions
 
-## API conventions
+Security is deny-by-default: access is denied until a specific rule grants it.
 
-- Keep endpoints small, explicit and resource-oriented.
+- Authenticate and authorize at the server or trusted application boundary.
+- Never trust identity, tenant, role, permission or approval values supplied only by a client.
+- Apply authorization close to the protected resource, not only at the outer route or UI layer.
+- Use explicit allowlists for roles, actions, state transitions, origins and external operations.
+- Keep secrets, credentials, password hashes and private payloads out of clients, logs and analytics.
+- Validate all external input and third-party responses at the boundary.
+- Do not create anonymous debug, impersonation or fallback paths for convenience.
+- Return generic external errors; keep sensitive diagnostics in protected logs.
+- Apply least privilege to runtime credentials and separate them from migration or administrative credentials.
+
+```ts
+export function requirePermission(granted: boolean): void {
+  if (!granted) throw new Error('Forbidden');
+}
+```
+
+## Database
+
+- Keep schemas as small as the domain allows; model required business facts, not hypothetical features.
+- Use migrations as the source of reproducible database changes.
+- Use UUIDs, foreign keys, unique constraints, check constraints and indexes intentionally.
+- Add `createdAt` and `updatedAt` to normal mutable domain tables by default.
+- Add `deletedAt` when recoverable deletion or historical retention is needed; do not add it automatically to append-only or purely relational tables.
+- Make tenant ownership explicit when a project has tenant boundaries, and use database-level isolation such as RLS where appropriate.
+- Keep permissions closed by default in database policies and grant only required operations.
+- Never commit database credentials or personal connection details.
+- Migration tooling must use controlled, non-personal credentials; runtime application access must use a least-privilege database role.
+- Keep database-library types out of UI contracts.
+- Use transactions when multiple writes must succeed together or when a business change emits an event.
+
+```ts
+const rows = await db
+  .select()
+  .from(records)
+  .where(and(eq(records.id, recordId), eq(records.tenantId, context.tenantId)));
+```
+
+## API and contracts
+
+- Keep API endpoints small, explicit and resource-oriented.
+- Keep handlers thin: parse input, authorize, call domain logic and serialize the result.
 - Use a consistent response and error shape.
-- Separate authentication, authorization, validation, domain logic and external integrations.
-- Treat external MCP responses as untrusted input and revalidate product IDs, prices, quantities and basket state before mutations.
-- Read operations may run automatically. Real basket mutations require a fresh, server-validated owner approval for the intended proposal.
-- Do not add debug, impersonation or unauthenticated data endpoints to make local development easier.
-- Health checks may report process/dependency availability only; they must not expose secrets, user data or detailed infrastructure configuration.
+- Treat the API contract as the boundary between backend and UI.
+- Update shared contracts, serializers and UI types together after a domain or database schema change.
+- Never return internal database fields such as credentials, hashes, private metadata or audit internals.
+- Do not expose raw database rows directly to clients.
+- Separate read operations from state-changing operations.
+- Make external calls time-bounded, validated and idempotent when they mutate state.
+- Select mock and real adapters explicitly through configuration; never switch silently after a failure.
 
-## Expo / mobile conventions
+## React and React Native
 
-- Keep the mobile app simple: screens, navigation, API client, auth state and user-facing error/loading states should be easy to follow.
-- The mobile app is an untrusted client. It must not contain authorization decisions, Silpo tokens, database credentials or agent secrets.
-- Do not hardcode `localhost` for a physical phone. During local testing, the phone and development machine normally need to be on the same Wi-Fi, and the API must be reachable through the machine's LAN address.
-- Bind the local API to a deliberate development interface and avoid exposing it to the public internet. Use a temporary HTTPS tunnel only when OAuth callbacks or remote access require it.
-- Keep permission-sensitive actions visually explicit: proposal, edit, owner approval and basket update are different states.
-- Never claim that food has definitely run out when the system only has an estimate; phrase follow-up notifications as questions.
+- Keep components focused on presentation and interaction.
+- Extract repeated UI into a shared `components` module.
+- Keep data fetching and domain logic out of low-level presentational components.
+- Keep loading, empty, error, disabled and pressed states explicit.
+- Use theme tokens for colors, spacing and typography instead of repeated hardcoded values.
+- Prefer accessible platform primitives before writing custom interaction components.
 
-## Database and domain rules
+### Expo projects
 
-- PostgreSQL is the source of truth for users, households, memberships, invitations, connected accounts, planning sessions, approvals and notification jobs.
-- Use explicit state transitions for proposals, approvals and basket updates. Do not infer authorization from a status stored only on the client.
-- Use transactions for approval plus the corresponding basket mutation metadata.
-- Store timestamps in UTC and keep estimated consumption separate from observed feedback.
-- Avoid exact pantry-inventory claims unless the user confirms them.
+- Use Expo and Expo Router when the project is based on Expo.
+- Use React Native Paper for common cross-platform UI and centralized themes when it fits the product.
+- Use native or Expo components for platform-specific controls when they provide a better experience.
+- Keep one shared component tree where possible; use platform-specific files only when behavior genuinely differs.
+- Use `react-native-safe-area-context` for safe-area handling.
+- Prefer native controls for switches, sliders, pickers and similar platform behaviors.
+- Keep mobile configuration free of server secrets and database credentials.
+- Do not hardcode `localhost` for a physical device; use an intentional LAN or development URL.
 
-## Definition of done for a feature
+```tsx
+<PaperProvider theme={theme}>
+  <Screen />
+</PaperProvider>
+```
 
-A feature is ready for owner verification when:
+## Definition of done
 
-- its tenant and role boundaries are explicit;
-- unauthenticated access is rejected except for health;
-- inputs and external responses are validated;
-- secrets and sensitive data stay server-side;
-- the mobile flow clearly represents loading, failure and approval states;
-- the owner has a simple manual verification command or flow to run when needed.
-
+- The implementation is focused and has no unnecessary fallback path.
+- Public boundaries have explicit types and validation.
+- Permissions are denied by default and checked at the trusted boundary.
+- Shared logic is not duplicated.
+- Database changes are represented by migrations and reflected in contracts where needed.
+- UI states and themes are handled consistently.
+- Documentation is updated when a decision affects future work.

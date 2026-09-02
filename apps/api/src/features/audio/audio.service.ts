@@ -1,5 +1,5 @@
 import { AppError } from '../../lib/errors.js'
-import type { RequestContext } from '../../lib/types.js'
+import type { RequestContext } from '@miyko/contracts'
 
 export class AudioService {
   process(context: RequestContext, input: { fileName: string; mimeType: string; durationSeconds: number; audioBase64: string }) {
@@ -15,4 +15,3 @@ export class AudioService {
   }
 }
 export const audioService = new AudioService()
-

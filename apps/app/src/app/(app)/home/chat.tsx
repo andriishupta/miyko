@@ -26,7 +26,7 @@ export default function ChatScreen() {
       <ScreenScroll bottomInset={insets.bottom + 112}>
         <View style={styles.intro}><View style={[styles.chatIcon, { backgroundColor: theme.accentSoft }]}><AppIcon name="message" size={24} color={theme.accent} /></View><MiykoText variant="title">What are you craving?</MiykoText><MiykoText variant="body" color="textSecondary" style={styles.center}>Share a meal idea, a reminder or a change to the next basket.</MiykoText></View>
         <Surface style={styles.messageBubble}><MiykoText variant="caption" color="textSecondary">MiyKo</MiykoText><MiykoText variant="body">Try: “I want breakfasts for three days.”</MiykoText></Surface>
-        {sent && <Surface style={[styles.messageBubble, { alignSelf: 'flex-end', backgroundColor: theme.accentSoft }]}><MiykoText variant="caption" color="accent">You</MiykoText><MiykoText variant="body">Mock message saved to your intent inbox.</MiykoText></Surface>}
+        {sent && <Surface style={[styles.messageBubble, { alignSelf: 'flex-end', backgroundColor: theme.accentSoft }]}><MiykoText variant="caption" color="accent">You</MiykoText><MiykoText variant="body">Message kept locally until the text-intent API route is available.</MiykoText></Surface>}
         <View style={styles.composer}><TextInput mode="outlined" value={message} onChangeText={setMessage} placeholder="Write a food intention…" textColor={theme.text} outlineColor={theme.border} activeOutlineColor={theme.accent} contentStyle={styles.inputContent} outlineStyle={styles.inputOutline} style={styles.input} /><IconButton name="arrow" label="Send message" onPress={sendMessage} /></View>
       </ScreenScroll>
     </>

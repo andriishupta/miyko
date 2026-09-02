@@ -6,5 +6,5 @@ serve({
   fetch: app.fetch,
   port: config.port,
 }, (info) => {
-  console.log(`MiyKo mock API is running on http://localhost:${info.port}`)
+  console.log(`MiyKo API scaffold is running on http://localhost:${info.port}`)
 })

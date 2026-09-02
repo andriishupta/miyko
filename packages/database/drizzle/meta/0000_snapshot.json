@@ -1,5 +1,5 @@
 {
-  "id": "ae32cd0e-984b-4e19-a117-3e557d367a51",
+  "id": "359654a4-9b3b-4827-8412-1839b7488205",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1048,7 +1048,7 @@
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
-          "default": "'member'"
+          "default": "'viewer'"
         },
         "can_make_decisions": {
           "name": "can_make_decisions",
@@ -1270,7 +1270,7 @@
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
-          "default": "'member'"
+          "default": "'viewer'"
         },
         "can_make_decisions": {
           "name": "can_make_decisions",
@@ -1470,10 +1470,6 @@
         "household_members_removed_at_consistency": {
           "name": "household_members_removed_at_consistency",
           "value": "(\"household_members\".\"status\" = 'active' AND \"household_members\".\"removed_at\" IS NULL) OR (\"household_members\".\"status\" = 'removed' AND \"household_members\".\"removed_at\" IS NOT NULL)"
-        },
-        "household_members_owner_decision_consistency": {
-          "name": "household_members_owner_decision_consistency",
-          "value": "\"household_members\".\"role\" <> 'owner' OR \"household_members\".\"can_make_decisions\" = true"
         }
       },
       "isRLSEnabled": true
@@ -5717,7 +5713,8 @@
       "values": [
         "owner",
         "admin",
-        "member"
+        "editor",
+        "viewer"
       ]
     },
     "public.intent_source": {

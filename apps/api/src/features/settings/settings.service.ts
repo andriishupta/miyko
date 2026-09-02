@@ -1,4 +1,4 @@
-import type { RequestContext } from '../../lib/types.js'
+import type { RequestContext } from '@miyko/contracts'
 
 type Settings = { notificationsEnabled: boolean; preferredPlanningDays: number; language: 'uk' | 'en' }
 const settings = new Map<string, Settings>()
@@ -12,4 +12,3 @@ export class SettingsService {
   }
 }
 export const settingsService = new SettingsService()
-

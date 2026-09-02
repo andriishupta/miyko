@@ -2,37 +2,37 @@
 
 ## Database scope and assumptions
 
-- [ ] Keep the database package as a Drizzle schema and migration package.
-- [ ] Use one existing PostgreSQL user for the prototype; do not create or manage PostgreSQL roles/users in this project yet.
+- [x] Keep the database package as a Drizzle schema and migration package.
+- [x] Use a dedicated `api_role` PostgreSQL user for the prototype; do not grant it `BYPASSRLS` or table ownership.
 - [ ] Keep the initial schema implementation separate from API route implementation.
 - [ ] Use PostgreSQL as the source of truth for identity, household membership, permissions, plans, proposals, orders, deliveries, feedback, notifications and outbox events.
 - [ ] Keep Mem0 as an external context store, not as a replacement for relational records or authorization.
-- [ ] Keep Silpo as the first provider, but model provider references so another shopping provider can be added later.
-- [ ] Keep all schema work migration-based and reversible where practical.
+- [x] Keep Silpo as the first provider, but model generic store and delivery provider references so another provider can be added later.
+- [x] Keep all schema work migration-based and reversible where practical.
 
 ## Drizzle package setup
 
-- [ ] Add a Drizzle configuration file with schema path, migrations directory and database URL configuration.
-- [ ] Add a database client module that reads the connection string from server-only environment configuration.
-- [ ] Add a single schema entry point that exports all table definitions and relations.
-- [ ] Add explicit database scripts for schema generation, migration and local inspection.
-- [ ] Add a safe environment example without real credentials.
-- [ ] Keep generated migration files committed; do not ignore Drizzle migrations or schema metadata required for reproducible migrations.
-- [ ] Add shared enums and timestamp helpers where they reduce schema duplication.
-- [ ] Add indexes and foreign keys intentionally based on API access patterns.
-- [ ] Add unique constraints and check constraints for identity, membership, statuses and provider identifiers.
+- [x] Add a Drizzle configuration file with schema path, migrations directory and database URL configuration.
+- [x] Add a database client module that reads the connection string from server-only environment configuration.
+- [x] Add a single schema entry point that exports all table definitions and relations.
+- [x] Add explicit database scripts for schema generation, migration and local inspection.
+- [x] Add a safe environment example without real credentials.
+- [x] Keep generated migration files committed; do not ignore Drizzle migrations or schema metadata required for reproducible migrations.
+- [x] Add shared enums and timestamp helpers where they reduce schema duplication.
+- [x] Add indexes and foreign keys intentionally based on API access patterns.
+- [x] Add unique and check constraints for identity, membership, statuses and provider identifiers.
 
 ## Users and authentication data
 
-- [ ] Create `public.users` as the global user record table.
-- [ ] Add a stable UUID primary key.
-- [ ] Add unique normalized email.
-- [ ] Add `password_hash`; never store a plaintext password.
-- [ ] Add first name, last name and optional display name.
-- [ ] Add account status, created timestamp, updated timestamp and last-login timestamp.
+- [x] Create `public.users` as the global user record table.
+- [x] Add a stable UUID primary key.
+- [x] Add unique normalized email.
+- [x] Add `password_hash`; never store a plaintext password.
+- [x] Add first name, last name and optional display name.
+- [x] Add account status, created timestamp, updated timestamp and last-login timestamp.
 - [ ] Keep account type independent from household membership; do not model a permanent `child` or `adult` user type.
 - [x] Add session records for the selected email/password plus opaque bearer-session authentication approach.
-- [ ] Keep password hashes and authentication records out of API responses, logs, Mem0 and client payloads.
+- [x] Keep password hashes and authentication records out of API responses, logs, Mem0 and client payloads.
 
 ## Households and membership
 
@@ -40,26 +40,24 @@
 - [ ] Create `household_members` as the many-to-many relation between users and households.
 - [ ] Support one user belonging to multiple households.
 - [ ] Add membership status and joined/removed timestamps.
-- [ ] Add household roles such as owner, admin and member.
-- [ ] Store `can_make_decisions` on the household membership, not on the global user.
-- [ ] Allow the same user to have different decision permissions in different households.
-- [ ] Allow a former child profile to become decision-capable without migrating the user account.
-- [ ] Allow any eligible user to create or join a new household later.
+- [x] Add household roles `owner`, `admin`, `editor` and `viewer`; permissions are derived from the current role.
+- [x] Allow the same user to have different roles in different households.
+- [x] Allow any eligible user to create or join a new household later through onboarding.
 - [ ] Enforce one active owner per household and define owner-transfer behavior.
-- [ ] Add an invitation table with household, inviter, invitee identity, role, decision permission, token hash, status and expiration.
-- [ ] Make invitation acceptance create or activate a household membership only after server-side validation.
-- [ ] Add indexes for active membership lookup by user and household.
+- [x] Add an invitation table with household, inviter, invitee identity, role, token hash, status and expiration.
+- [x] Make invitation acceptance create or activate a household membership only after server-side validation.
+- [x] Add indexes for active membership lookup by user and household.
 
 ## Row-Level Security and multi-tenancy
 
-- [ ] Treat `household_id` as the primary tenant boundary.
-- [ ] Add a non-null `household_id` to every household-owned table where practical.
+- [x] Treat `household_id` as the primary tenant boundary.
+- [x] Add a non-null `household_id` to every household-owned table where practical.
 - [x] Enable PostgreSQL RLS on all household-owned tables through schema-defined policies.
 - [x] Add high-level policies for select, insert, update and delete based on authenticated user identity and active household membership.
 - [x] Define how trusted API request context is passed into PostgreSQL inside a transaction.
-- [ ] Never derive RLS context from an untrusted client-provided household ID alone.
+- [x] Never derive RLS context from an untrusted client-provided household ID alone.
 - [x] Ensure users can access only memberships and records for households they belong to.
-- [ ] Ensure owner/admin/member permissions are enforced in addition to tenant isolation.
+- [x] Ensure owner/admin/editor/viewer permissions are enforced in the API in addition to tenant isolation.
 - [x] Keep global `users` records protected; `public` is the PostgreSQL schema name, not public unauthenticated access.
 - [x] Document the narrow exceptions for migrations and controlled administrative operations.
 - [ ] Add cross-household denial cases to the database verification plan before production use.
@@ -79,7 +77,7 @@
 
 ## Products and provider mapping
 
-- [ ] Create a local product/provider mapping table for products seen through Silpo MCP.
+- [x] Create a local product/provider mapping table for products seen through Silpo MCP.
 - [ ] Store provider name, provider product ID, normalized product name, current known details and last-seen timestamp.
 - [ ] Keep provider data cacheable and refreshable; do not assume cached price or availability is current.
 - [ ] Add product replacement/similarity references only if they are needed by the proposal flow.
@@ -115,12 +113,13 @@
 
 ## Connected shopping accounts
 
-- [ ] Create `connected_provider_accounts` for household-linked Silpo accounts.
-- [ ] Associate each connection with the household member who authorized it.
-- [ ] Store provider, encrypted access/refresh token references, scopes, status and expiration metadata.
-- [ ] Keep raw credentials out of normal query results, logs, Mem0 and mobile responses.
-- [ ] Store which connected account is selected for a household's final basket, without assuming every member has a provider account.
-- [ ] Add revocation and reconnect states.
+- [x] Create `user_providers` as a user-level many-to-many connection to generic providers.
+- [x] Store provider login identity, auth method, scopes and server-side token/credential references without storing raw secrets.
+- [x] Create `connected_provider_accounts` as the household binding for a user provider account.
+- [x] Associate each household connection with the member who authorized it.
+- [x] Keep raw credentials and secret references out of normal query results, logs, Mem0 and mobile responses.
+- [x] Store which connected account is selected for a household's final basket, without assuming every member has a provider account.
+- [x] Add revocation and reconnect states.
 
 ## Outbox pattern
 
@@ -167,7 +166,7 @@
 - [x] Implement Drizzle tables and relations.
 - [x] Generate the initial migration; applying it against PostgreSQL remains a later step.
 - [x] Add RLS policies and document the trusted request context.
-- [ ] Add password hashing and session persistence through the API authentication layer.
+- [x] Add password hashing and session persistence through the API authentication layer.
 - [ ] Add real Silpo account and order synchronization.
 - [ ] Add durable outbox processing and Mem0 synchronization.
 
@@ -175,7 +174,7 @@
 
 - [x] The schema plan covers users, households, memberships, permissions, invitations, intents, plans, products, proposals, approvals, orders, deliveries, provider accounts, feedback, notifications and outbox events.
 - [x] The model supports one user in multiple households without mixing data or memory.
-- [x] Decision capability is membership-scoped and can change over time.
+- [x] Permissions are membership-scoped and derived from the household role.
 - [x] Real provider orders can be reconciled with local records without losing historical snapshots.
 - [x] RLS and outbox boundaries are documented before implementation begins.
-- [x] No PostgreSQL user creation or real database operation is part of this scaffold task.
+- [x] `api_role` creation is isolated in the local PostgreSQL init script; migrations and seed use separate admin/runtime connections.

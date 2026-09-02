@@ -2,26 +2,18 @@
 
 ## API scaffold principles
 
-- [ ] Keep the API scaffold mock-only until the database, authentication provider and external integrations are explicitly enabled.
-- [ ] Organize the API by feature rather than by technical layer alone.
-- [ ] Keep route handlers thin; place business logic in feature services and integration logic in dedicated clients.
-- [ ] Keep authentication, authorization, validation, error handling and observability as shared infrastructure.
-- [ ] Do not create a sign-up endpoint for the MVP; users will be created by a controlled script or administrative flow.
-- [ ] Add clear mock adapters so real database and external integrations can replace them without changing route contracts.
+- [x] Use the existing Drizzle database for relational API resources; keep only external integrations mock-backed.
+- [x] Organize the API by feature rather than by technical layer alone.
+- [x] Keep route handlers thin; place business logic in feature services and integration logic in dedicated clients.
+- [x] Keep authentication, authorization, validation, error handling and observability as shared infrastructure.
+- [x] Keep registration available so a user can exist before choosing `Create household` or `Join household` during onboarding.
+- [x] Add clear mock adapters so real database and external integrations can replace them without changing route contracts.
 
 ## Suggested feature-based structure
 
-- [ ] Create a feature directory for authentication and sessions.
-- [ ] Create a feature directory for dashboard data.
-- [ ] Create a feature directory for products.
-- [ ] Create a feature directory for deliveries and orders.
-- [ ] Create a feature directory for household and member management.
-- [ ] Create a feature directory for settings.
-- [ ] Create a feature directory for audio processing.
-- [ ] Create a feature directory for memory and feedback.
-- [ ] Create a shared `middleware` area for security and request context.
-- [ ] Create a shared `lib` or `infrastructure` area for configuration, logging, errors and external clients.
-- [ ] Keep each feature close to its route, schema, service, mock data and types.
+- [x] Create feature directories for authentication, dashboard, products, deliveries/orders, household management, providers, settings, audio and memory/feedback.
+- [x] Create shared `middleware` and `lib` areas for security, request context, configuration, logging, errors and clients.
+- [x] Keep each feature close to its route, schema, service, mock data and types.
 
 Example target structure:
 
@@ -66,7 +58,7 @@ src/
 - [ ] Add secure HTTP headers with a Hono-compatible Helmet implementation or an equivalent maintained middleware.
 - [ ] Configure CORS with an explicit allowlist for the local Expo app and known production origins.
 - [ ] Do not allow `*` origins with credentials.
-- [ ] Add authentication middleware to every route except the health route.
+- [x] Add authentication middleware to every route except explicitly documented auth bootstrap routes and health.
 - [ ] Add authorization checks after authentication for every household-scoped resource.
 - [ ] Build trusted request context from the authenticated user and selected household; never trust client-provided roles or tenant identity.
 - [ ] Add request ID and structured logging middleware.
@@ -84,11 +76,11 @@ src/
 ## Authentication
 
 - [ ] Add a login route for existing users.
-- [ ] Do not add a public sign-up route.
+- [x] Keep account creation separate from household onboarding.
 - [ ] Add session or access-token validation middleware.
 - [ ] Add a controlled user-seeding script for development and demo users.
 - [ ] Add logout/session-revocation behavior when the authentication approach is selected.
-- [ ] Add role and household membership checks for owner, adult member and child profile permissions.
+- [x] Add role and household membership checks for owner, admin, editor and viewer permissions.
 - [ ] Ensure login responses never include Silpo OAuth tokens or internal credentials.
 
 ## Dashboard API
@@ -121,16 +113,16 @@ src/
 - [ ] Add routes for editing, replacing and removing proposed items.
 - [ ] Require a fresh server-side owner authorization check before any real basket update.
 - [ ] Add idempotency keys and explicit state transitions for create, review, approve, decline and update operations.
-- [ ] Keep all order and delivery responses mock-backed in the initial scaffold.
+- [x] Read order and delivery responses from the existing Drizzle database; keep only the external basket adapter mocked.
 
 ## Household and settings API
 
 - [ ] Add authenticated household summary and member list routes.
-- [ ] Add owner/member permission handling.
-- [ ] Add an authenticated invite-member route.
+- [x] Add owner/admin/editor/viewer permission handling.
+- [x] Add an authenticated invite-member route.
 - [ ] Add invite status and acceptance behavior when authentication is available.
 - [ ] Add a settings route for the current user and household.
-- [ ] Keep household and settings data mock-backed until PostgreSQL is connected.
+- [x] Keep household data on the existing PostgreSQL schema; settings remain process-local until a settings table exists.
 
 ## Audio processing API
 
@@ -145,15 +137,16 @@ src/
 
 ## MCP client scaffold
 
-- [ ] Create an MCP client interface without connecting to the real Silpo MCP server.
-- [ ] Create a mock MCP client implementing product search, product details, replacements, order history, basket read and basket update contracts.
+- [x] Create an MCP client interface without connecting to the real Silpo MCP server.
+- [x] Create a mock MCP client implementing product search, product details, replacements, order history, basket read and basket update contracts.
 - [ ] Create a separate MCP configuration file for server URL, transport and feature flags.
-- [ ] Keep MCP credentials and OAuth handling server-side.
+- [x] Keep MCP credentials and OAuth handling server-side.
 - [ ] Add a discovery step based on `tools/list` before implementing real tool calls.
-- [ ] Validate every MCP request and response at the integration boundary.
-- [ ] Separate read-only MCP operations from basket-changing operations.
-- [ ] Require owner approval in the API before calling any basket-changing MCP operation.
-- [ ] Add MCP timeout, retry, error mapping and audit logging rules.
+- [x] Validate every MCP request and response at the integration boundary.
+- [x] Separate read-only MCP operations from basket-changing operations.
+- [x] Require owner approval in the API before calling any basket-changing MCP operation.
+- [x] Add MCP timeout, retry, error mapping and audit logging rules.
+- [x] Add a generic store-provider port, registry, Silpo adapter, provider login and reauthorization endpoints.
 - [ ] Make it possible to switch between mock and real MCP clients through server configuration, not mobile input.
 
 ## Memory and feedback

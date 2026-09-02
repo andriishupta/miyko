@@ -8,7 +8,7 @@ export const productsRoutes = new Hono()
 
 productsRoutes.get('/search', rateLimit('product-search', 60, 60_000), async (c) => {
   const query = parseQuery(c, productSearchSchema)
-  return c.json({ data: await productsService.search(c.get('requestContext'), query.q, query.category, query.limit) })
+  return c.json({ data: await productsService.search(c.get('requestContext'), query.query, query.category, query.limit) })
 })
 
 productsRoutes.get('/:id/replacements', async (c) => {

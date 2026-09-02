@@ -6,7 +6,7 @@ import { useTheme } from '@/hooks/use-theme';
 
 export function DeliveryCard({ title, date, status, total, onPress }: { title: string; date: string; status: string; total: string; onPress: () => void }) {
   const theme = useTheme();
-  const tone = status === 'Approved' ? 'success' : status === 'Proposed' ? 'warning' : 'neutral';
+  const tone = status === 'Approved' || status === 'Delivered' ? 'success' : status === 'Proposed' || status === 'Planned' || status === 'Scheduled' ? 'warning' : 'neutral';
   return <Pressable onPress={onPress} style={({ pressed }) => pressed && styles.pressed}><Surface style={styles.card}><View style={[styles.icon, { backgroundColor: theme.accentSoft }]}><AppIcon name="cart" size={20} color={theme.accent} /></View><View style={{ flex: 1, gap: 3 }}><MiykoText variant="section">{title}</MiykoText><MiykoText variant="caption" color="textSecondary">{date}</MiykoText><StatusPill label={status} tone={tone} /></View><View style={styles.right}><MiykoText variant="label">{total}</MiykoText><AppIcon name="chevron" size={18} color={theme.textSecondary} /></View></Surface></Pressable>;
 }
 

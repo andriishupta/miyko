@@ -1,4 +1,4 @@
-export type Role = 'owner' | 'adult_member' | 'child'
+export type Role = 'owner' | 'admin' | 'editor' | 'viewer'
 export type UserStatus = 'active' | 'invited'
 export type ProposalStatus = 'draft' | 'review' | 'approved' | 'declined' | 'basket_updated'
 
@@ -97,4 +97,3 @@ export type OutboxEvent = {
   processedAt: string | null
   createdAt: string
 }
-

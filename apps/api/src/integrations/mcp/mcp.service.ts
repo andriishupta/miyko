@@ -2,7 +2,7 @@ import { AppError } from '../../lib/errors.js'
 import { logger } from '../../lib/logger.js'
 import { mcpConfig } from './mcp.config.js'
 import { mockMcpClient } from './mcp.mock.js'
-import type { McpClient } from './mcp.client.js'
+import type { McpClient, ProviderAuthResult, ProviderLoginInput } from './mcp.client.js'
 import { z } from 'zod'
 
 const productSchema = z.object({
@@ -13,6 +13,9 @@ const deliverySchema = z.object({ id: z.string(), householdId: z.string(), statu
 const basketSchema = z.object({ householdId: z.string(), items: z.array(z.object({ productId: z.string(), quantity: z.number().int().positive() }).strict()) }).strict()
 const productSearchInputSchema = z.object({ query: z.string().max(100), category: z.string().max(60).optional(), limit: z.number().int().min(1).max(50) }).strict()
 const basketUpdateInputSchema = z.object({ householdId: z.string().min(1), proposalId: z.string().min(1), items: z.array(z.object({ productId: z.string().min(1), quantity: z.number().int().min(1).max(50) }).strict()).max(50) }).strict()
+const providerLoginInputSchema = z.object({ login: z.string().min(1).max(320), password: z.string().min(1).max(200) }).strict()
+const providerReauthorizeInputSchema = z.object({ refreshToken: z.string().min(1) }).strict()
+const providerAuthResultSchema = z.object({ providerSubject: z.string().nullable(), accountLogin: z.string().nullable(), accessToken: z.string().min(1), refreshToken: z.string().nullable(), accessTokenExpiresAt: z.string().datetime().nullable(), refreshTokenExpiresAt: z.string().datetime().nullable(), scopes: z.array(z.string()) }).strict()
 
 const withTimeout = async <T>(operation: string, work: () => Promise<T>) => {
   let timeout: ReturnType<typeof setTimeout> | undefined
@@ -37,10 +40,12 @@ export class McpService {
   constructor(private readonly client: McpClient = mcpConfig.mode === 'mock' ? mockMcpClient : unavailableRealClient()) {}
 
   async discoverTools() { return retryOnce('tools/list', () => this.client.discoverTools()) }
+  async authenticate(input: ProviderLoginInput): Promise<ProviderAuthResult> { const checkedInput = providerLoginInputSchema.parse(input); return providerAuthResultSchema.parse(await retryOnce('provider/authenticate', () => this.client.authenticate(checkedInput))) }
+  async reauthorize(input: { refreshToken: string }): Promise<ProviderAuthResult> { const checkedInput = providerReauthorizeInputSchema.parse(input); return providerAuthResultSchema.parse(await retryOnce('provider/reauthorize', () => this.client.reauthorize(checkedInput))) }
   async searchProducts(input: Parameters<McpClient['searchProducts']>[0]) { const checkedInput = productSearchInputSchema.parse(input); return (await retryOnce('products/search', () => this.client.searchProducts(checkedInput))).map((product) => productSchema.parse(product)) }
   async getProduct(productId: string) { const product = await retryOnce('products/details', () => this.client.getProduct(productId)); return product ? productSchema.parse(product) : null }
   async getReplacements(productId: string) { return (await retryOnce('products/replacements', () => this.client.getReplacements(productId))).map((product) => productSchema.parse(product)) }
-  async getOrderHistory(householdId: string) { return (await retryOnce('orders/history', () => this.client.getOrderHistory(householdId))).map((delivery) => deliverySchema.parse(delivery)) }
+  async getOrderHistory(input: { householdId: string; accessToken: string }) { return (await retryOnce('orders/history', () => this.client.getOrderHistory(input))).map((delivery) => deliverySchema.parse(delivery)) }
   async getBasket(householdId: string) { return basketSchema.parse(await retryOnce('basket/read', () => this.client.getBasket(householdId))) }
 
   async updateBasket(input: Parameters<McpClient['updateBasket']>[0], ownerApproved: boolean) {
@@ -53,6 +58,8 @@ export class McpService {
 
 const unavailableRealClient = (): McpClient => ({
   async discoverTools() { throw new AppError('MCP_REAL_DISABLED', 'Real MCP client is not enabled in the mock scaffold', 503) },
+  async authenticate() { throw new AppError('MCP_REAL_DISABLED', 'Real MCP client is not enabled in the mock scaffold', 503) },
+  async reauthorize() { throw new AppError('MCP_REAL_DISABLED', 'Real MCP client is not enabled in the mock scaffold', 503) },
   async searchProducts() { throw new AppError('MCP_REAL_DISABLED', 'Real MCP client is not enabled in the mock scaffold', 503) },
   async getProduct() { throw new AppError('MCP_REAL_DISABLED', 'Real MCP client is not enabled in the mock scaffold', 503) },
   async getReplacements() { throw new AppError('MCP_REAL_DISABLED', 'Real MCP client is not enabled in the mock scaffold', 503) },

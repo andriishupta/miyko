@@ -1,43 +1,76 @@
+import { randomBytes } from 'node:crypto'
+import { and, eq, gt, or } from 'drizzle-orm'
+import { householdInvitations, householdMembers, households, users } from '@miyko/database/schema'
+import type { AuthUser, CreateHouseholdResponse, HouseholdInvitation, HouseholdSummary, InviteMemberRequest, RequestContext } from '@miyko/contracts'
+import { db } from '../../lib/database.js'
 import { forbidden, notFound } from '../../lib/errors.js'
-import { findHousehold, findMembership, memberships, users } from '../../lib/mock-store.js'
-import type { RequestContext, Role, User } from '../../lib/types.js'
+import { sha256 } from '../auth/auth.service.js'
+import { toContractHousehold, toContractMember, toContractMembership } from '../../lib/serializers.js'
+import { storeProviderService } from '../../integrations/store-providers/store-provider.service.js'
 
-type Invitation = { id: string; householdId: string; email: string; role: Exclude<Role, 'owner'>; status: 'pending' | 'accepted'; invitedBy: string }
-const invitations: Invitation[] = [{ id: 'invitation-demo-1', householdId: 'household-petrenko', email: 'friend@miyko.local', role: 'adult_member', status: 'pending', invitedBy: 'user-andrii' }]
+const toInvitation = (row: typeof householdInvitations.$inferSelect): HouseholdInvitation => ({
+  id: row.id, householdId: row.householdId, inviterId: row.inviterId, inviteeUserId: row.inviteeUserId, inviteeEmail: row.inviteeEmail,
+  role: row.role === 'owner' ? 'viewer' : row.role, status: row.status,
+  expiresAt: row.expiresAt.toISOString(), acceptedAt: row.acceptedAt?.toISOString() ?? null,
+})
 
 export class HouseholdsService {
-  summary(context: RequestContext) { return { ...context.household, role: context.membership.role } }
+  async createForUser(user: AuthUser, name: string): Promise<CreateHouseholdResponse> {
+    const householdRows = await db.insert(households).values({ name, ownerId: user.id }).returning()
+    const household = householdRows[0]
+    const memberRows = await db.insert(householdMembers).values({ householdId: household.id, userId: user.id, role: 'owner', status: 'active' }).returning()
+    await storeProviderService.bindToHousehold(user.id, household.id, memberRows[0].id)
+    return { household: toContractHousehold(household), membership: toContractMembership(memberRows[0]) }
+  }
 
-  members(context: RequestContext) {
-    return memberships.filter((membership) => membership.householdId === context.household.id).map((membership) => {
-      const user = users.find((candidate) => candidate.id === membership.userId)
-      return { id: user?.id, name: user?.name, email: user?.email, role: membership.role }
+  async summary(context: RequestContext): Promise<HouseholdSummary> {
+    return { ...context.household, currentMember: context.membership }
+  }
+
+  async members(context: RequestContext) {
+    const rows = await db.query.householdMembers.findMany({ where: eq(householdMembers.householdId, context.household.id), with: { user: true } })
+    return rows.map((row) => toContractMember(row))
+  }
+
+  async invite(context: RequestContext, input: InviteMemberRequest) {
+    if (context.membership.role !== 'owner' && context.membership.role !== 'admin') throw forbidden()
+    const invitee = await db.query.users.findFirst({ where: eq(users.normalizedEmail, input.email.trim().toLowerCase()) })
+    const token = randomBytes(32).toString('base64url')
+    const row = await db.insert(householdInvitations).values({
+      householdId: context.household.id, inviterId: context.user.id, inviteeUserId: invitee?.id ?? null,
+      inviteeEmail: invitee ? null : input.email.trim().toLowerCase(), role: input.role,
+      tokenHash: sha256(token), expiresAt: new Date(Date.now() + 7 * 86_400_000),
+    }).returning()
+    return { invitation: toInvitation(row[0]), token }
+  }
+
+  async listInvitations(context: RequestContext) {
+    const rows = await db.query.householdInvitations.findMany({ where: eq(householdInvitations.householdId, context.household.id) })
+    return rows.map(toInvitation)
+  }
+
+  async acceptForUser(user: AuthUser, invitationId: string) {
+    const invitation = await db.query.householdInvitations.findFirst({
+      where: and(eq(householdInvitations.id, invitationId), eq(householdInvitations.status, 'pending'), gt(householdInvitations.expiresAt, new Date()), or(eq(householdInvitations.inviteeUserId, user.id), eq(householdInvitations.inviteeEmail, user.email.toLowerCase()))),
     })
-  }
-
-  invite(context: RequestContext, email: string, role: Exclude<Role, 'owner'>) {
-    if (context.membership.role !== 'owner') throw forbidden()
-    const invitation: Invitation = { id: `invitation-${Date.now()}`, householdId: context.household.id, email, role, status: 'pending', invitedBy: context.user.id }
-    invitations.push(invitation)
-    return invitation
-  }
-
-  listInvitations(context: RequestContext) { return invitations.filter((invitation) => invitation.householdId === context.household.id) }
-
-  accept(context: RequestContext, invitationId: string) {
-    const invitation = invitations.find((candidate) => candidate.id === invitationId && candidate.householdId === context.household.id)
     if (!invitation) throw notFound('Invitation')
-    invitation.status = 'accepted'
-    return invitation
-  }
-
-  acceptForUser(user: User, invitationId: string) {
-    const invitation = invitations.find((candidate) => candidate.id === invitationId && candidate.email === user.email && candidate.status === 'pending')
-    const household = invitation ? findHousehold(invitation.householdId) : undefined
-    if (!invitation || !household) throw notFound('Invitation')
-    if (!findMembership(user.id, household.id)) memberships.push({ userId: user.id, householdId: household.id, role: invitation.role })
-    invitation.status = 'accepted'
-    return invitation
+    let memberId: string
+    const result = await db.transaction(async (tx) => {
+      const existing = await tx.query.householdMembers.findFirst({ where: and(eq(householdMembers.householdId, invitation.householdId), eq(householdMembers.userId, user.id)) })
+      if (!existing) {
+        const rows = await tx.insert(householdMembers).values({ householdId: invitation.householdId, userId: user.id, role: invitation.role === 'owner' ? 'viewer' : invitation.role, status: 'active' }).returning()
+        memberId = rows[0].id
+      } else if (existing.status === 'removed') {
+        memberId = existing.id
+        await tx.update(householdMembers).set({ role: invitation.role === 'owner' ? 'viewer' : invitation.role, status: 'active', joinedAt: new Date(), removedAt: null, updatedAt: new Date() }).where(eq(householdMembers.id, existing.id))
+      } else {
+        memberId = existing.id
+      }
+      await tx.update(householdInvitations).set({ inviteeUserId: user.id, inviteeEmail: null, status: 'accepted', acceptedAt: new Date(), updatedAt: new Date() }).where(eq(householdInvitations.id, invitation.id))
+      return toInvitation({ ...invitation, inviteeUserId: user.id, inviteeEmail: null, status: 'accepted', acceptedAt: new Date() })
+    })
+    await storeProviderService.bindToHousehold(user.id, invitation.householdId, memberId)
+    return result
   }
 }
 

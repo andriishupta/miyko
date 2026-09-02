@@ -19,8 +19,8 @@ export const households: Household[] = [
 
 export const memberships: Membership[] = [
   { userId: 'user-andrii', householdId: 'household-petrenko', role: 'owner' },
-  { userId: 'user-maria', householdId: 'household-petrenko', role: 'adult_member' },
-  { userId: 'user-child', householdId: 'household-petrenko', role: 'child' },
+  { userId: 'user-maria', householdId: 'household-petrenko', role: 'editor' },
+  { userId: 'user-child', householdId: 'household-petrenko', role: 'viewer' },
 ]
 
 export const products: Product[] = [

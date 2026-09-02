@@ -16,7 +16,7 @@ MiyKo never creates or changes a real shopping basket without explicit owner app
 The prototype focuses on:
 
 - individual and shared household spaces;
-- owner and member roles;
+- owner, admin, editor and viewer roles with per-member decision capability;
 - food intentions and meal planning;
 - household preferences, restrictions and purchase history;
 - Mem0 long-term memory;
@@ -50,7 +50,7 @@ packages/
   config/       Shared project configuration
 ```
 
-There is no need for Docker Compose or a separate agent/worker application during the prototype. The API can contain the workflow runner and scheduler until scale or deployment needs justify splitting them.
+Docker Compose is used only for local PostgreSQL persistence; there is still no separate agent/worker application during the prototype. The API can contain the workflow runner and scheduler until scale or deployment needs justify splitting them.
 
 ## Technology direction
 
@@ -90,6 +90,20 @@ The expected development workflow is local-first:
 
 Deployment is optional for the hackathon demo. A hosted API becomes useful only when the phone is outside the local network, an OAuth provider requires a public HTTPS callback, or another person needs to access the demo.
 
+## Local PostgreSQL
+
+Copy `.env.example` to `.env`, then start and migrate the local database:
+
+```sh
+cp .env.example .env
+set -a; . ./.env; set +a
+docker compose up -d postgres
+pnpm --filter @miyko/database db:migrate
+pnpm --filter api seed:demo
+```
+
+The API uses `DATABASE_URL` with the non-owner `api_role`; Drizzle and the demo seed use the admin-only `MIGRATION_DATABASE_URL`. PostgreSQL data is kept in the `miyko_postgres_data` volume.
+
 ## Development approach
 
 Work in small vertical slices that prove the product loop:
@@ -108,4 +122,3 @@ Keep the implementation understandable and avoid building features outside the M
 ## Repository status
 
 This repository currently contains the product documentation and workspace configuration. Applications and shared packages are added incrementally as the implementation begins.
-

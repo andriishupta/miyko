@@ -1,5 +1,5 @@
 import { logger } from '../../lib/logger.js'
-import type { RequestContext } from '../../lib/types.js'
+import type { RequestContext } from '@miyko/contracts'
 import { outboxService } from './outbox.service.js'
 
 export class MockOutboxWorker {
@@ -11,4 +11,3 @@ export class MockOutboxWorker {
 }
 
 export const mockOutboxWorker = new MockOutboxWorker()
-
