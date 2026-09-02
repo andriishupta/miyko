@@ -1,7 +1,14 @@
 import type { WorkflowAction as ContractWorkflowAction, WorkflowReference as ContractWorkflowReference } from "@miyko/contracts";
 
 export type WorkflowAction = ContractWorkflowAction;
-export type WorkflowReference = ContractWorkflowReference;
+export type WorkflowInterrupt = {
+  externalRequestId: string | null;
+  action: "provider_action" | "fulfillment" | "delivery_slot";
+};
+
+export type WorkflowReference = ContractWorkflowReference & {
+  interrupt?: WorkflowInterrupt;
+};
 
 export type WorkflowInput = {
   workflowId: string;

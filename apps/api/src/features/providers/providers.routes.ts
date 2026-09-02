@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { authMiddleware } from '../../middleware/auth.js'
+import { authMiddleware, requireRole } from '../../middleware/auth.js'
 import { parseJson, parseParams } from '../../middleware/validation.js'
 import { providerAuthSchema, providerReauthorizeSchema, providerSlugSchema } from './providers.schemas.js'
 import { storeProviderService } from '../../integrations/store-providers/store-provider.service.js'
@@ -30,7 +30,7 @@ providersRoutes.delete('/:providerSlug', authMiddleware, async (c) => {
 
 /** Household-scoped operations use the active binding, not just a user account. */
 export const householdProviderRoutes = new Hono()
-householdProviderRoutes.post('/:providerSlug/bind', async (c) => {
+householdProviderRoutes.post('/:providerSlug/bind', requireRole('owner', 'admin'), async (c) => {
   const params = parseParams(c, providerSlugSchema)
   return c.json({ data: await storeProviderService.bindAccountToHousehold(c.get('requestContext'), params.providerSlug) })
 })

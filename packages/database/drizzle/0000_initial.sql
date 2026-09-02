@@ -208,6 +208,7 @@ CREATE INDEX household_members_user_active_idx ON public.household_members (user
 CREATE INDEX household_members_household_active_idx ON public.household_members (household_id, status);
 CREATE UNIQUE INDEX household_invitations_token_hash_uq ON public.household_invitations (token_hash);
 CREATE INDEX household_invitations_household_status_idx ON public.household_invitations (household_id, status);
+CREATE INDEX household_invitations_invitee_email_idx ON public.household_invitations (invitee_email);
 CREATE UNIQUE INDEX providers_slug_uq ON public.providers (slug);
 CREATE UNIQUE INDEX providers_name_uq ON public.providers (name);
 CREATE UNIQUE INDEX user_providers_user_provider_subject_uq ON public.user_providers (user_id, provider_id, provider_subject);
@@ -221,7 +222,7 @@ CREATE INDEX workflows_household_status_idx ON public.workflows (household_id, s
 CREATE INDEX workflow_approvals_workflow_status_idx ON public.workflow_approvals (workflow_id, status);
 CREATE UNIQUE INDEX workflow_approvals_external_request_uq ON public.workflow_approvals (workflow_id, external_request_id);
 CREATE UNIQUE INDEX outbox_events_aggregate_transition_uq ON public.outbox_events (aggregate_type, aggregate_id, event_type, version);
-CREATE INDEX outbox_events_pending_idx ON public.outbox_events (status, available_at);
+CREATE INDEX outbox_events_claim_idx ON public.outbox_events (status, available_at, claim_expires_at);
 CREATE INDEX audit_logs_household_created_idx ON public.audit_logs (household_id, created_at);
 CREATE INDEX audit_logs_aggregate_idx ON public.audit_logs (aggregate_type, aggregate_id);
 
@@ -264,6 +265,90 @@ CREATE OR REPLACE FUNCTION public.miyko_auth_create_session(target_user_id uuid,
 RETURNS TABLE (session_id uuid)
 LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path = pg_catalog
 AS $$ INSERT INTO public.user_sessions (user_id, token_hash, expires_at) SELECT u.id, target_token_hash, target_expires_at FROM public.users u WHERE u.id = target_user_id AND u.status = 'active' RETURNING user_sessions.id $$;
+
+CREATE OR REPLACE FUNCTION public.miyko_claim_outbox_events(target_worker_id varchar, target_limit integer, target_lease_ms integer)
+RETURNS TABLE (
+  user_id uuid,
+  member_id uuid,
+  id uuid,
+  household_id uuid,
+  aggregate_type varchar,
+  aggregate_id uuid,
+  event_type varchar,
+  version integer,
+  payload jsonb,
+  status public.outbox_status,
+  attempts integer,
+  available_at timestamptz,
+  claimed_at timestamptz,
+  claimed_by varchar,
+  claim_expires_at timestamptz,
+  processed_at timestamptz,
+  last_error text,
+  created_at timestamptz,
+  updated_at timestamptz
+)
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog
+AS $$
+BEGIN
+  IF target_worker_id IS NULL OR btrim(target_worker_id) = '' THEN
+    RAISE EXCEPTION 'worker id is required' USING ERRCODE = '22023';
+  END IF;
+  IF target_limit < 1 OR target_limit > 100 THEN
+    RAISE EXCEPTION 'claim limit is out of range' USING ERRCODE = '22023';
+  END IF;
+  IF target_lease_ms < 1000 OR target_lease_ms > 3600000 THEN
+    RAISE EXCEPTION 'lease duration is out of range' USING ERRCODE = '22023';
+  END IF;
+
+  RETURN QUERY
+  WITH candidates AS (
+    SELECT e.id, member.id AS member_id
+    FROM public.outbox_events e
+    JOIN LATERAL (
+      SELECT m.id
+      FROM public.household_members m
+      WHERE m.household_id = e.household_id
+        AND m.status = 'active'
+      ORDER BY
+        (m.id::text = e.payload ->> 'requestedByMemberId') DESC,
+        (m.role = 'owner') DESC,
+        m.joined_at,
+        m.id
+      LIMIT 1
+    ) member ON true
+    WHERE (
+      e.status IN ('pending', 'retrying')
+      AND e.available_at <= clock_timestamp()
+    ) OR (
+      e.status = 'processing'
+      AND e.claim_expires_at <= clock_timestamp()
+    )
+    ORDER BY e.available_at, e.created_at, e.id
+    LIMIT target_limit
+    FOR UPDATE OF e SKIP LOCKED
+  ), claimed AS (
+    UPDATE public.outbox_events e
+    SET status = 'processing',
+        attempts = e.attempts + 1,
+        claimed_at = clock_timestamp(),
+        claimed_by = target_worker_id,
+        claim_expires_at = clock_timestamp() + make_interval(msecs => target_lease_ms),
+        updated_at = clock_timestamp()
+    FROM candidates c
+    WHERE e.id = c.id
+    RETURNING e.*, c.member_id
+  )
+  SELECT member.user_id, c.member_id, c.id, c.household_id, c.aggregate_type,
+         c.aggregate_id, c.event_type, c.version, c.payload, c.status,
+         c.attempts, c.available_at, c.claimed_at, c.claimed_by,
+         c.claim_expires_at, c.processed_at, c.last_error, c.created_at,
+         c.updated_at
+  FROM claimed c
+  JOIN public.household_members member ON member.id = c.member_id
+  WHERE member.status = 'active';
+END;
+$$;
 
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_sessions ENABLE ROW LEVEL SECURITY;
@@ -333,6 +418,7 @@ REVOKE ALL ON FUNCTION public.miyko_auth_find_user_by_email(varchar) FROM PUBLIC
 REVOKE ALL ON FUNCTION public.miyko_auth_find_session(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.miyko_auth_create_user(varchar, varchar, text, varchar, varchar, varchar) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.miyko_auth_create_session(uuid, text, timestamptz) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.miyko_claim_outbox_events(varchar, integer, integer) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.miyko_current_user_id() TO api_role;
 GRANT EXECUTE ON FUNCTION public.miyko_current_user_email() TO api_role;
 GRANT EXECUTE ON FUNCTION public.miyko_is_household_member(uuid) TO api_role;
@@ -342,5 +428,6 @@ GRANT EXECUTE ON FUNCTION public.miyko_auth_find_user_by_email(varchar) TO api_r
 GRANT EXECUTE ON FUNCTION public.miyko_auth_find_session(text) TO api_role;
 GRANT EXECUTE ON FUNCTION public.miyko_auth_create_user(varchar, varchar, text, varchar, varchar, varchar) TO api_role;
 GRANT EXECUTE ON FUNCTION public.miyko_auth_create_session(uuid, text, timestamptz) TO api_role;
+GRANT EXECUTE ON FUNCTION public.miyko_claim_outbox_events(varchar, integer, integer) TO api_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO api_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO api_role;

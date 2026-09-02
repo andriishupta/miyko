@@ -10,7 +10,7 @@
 
 MiyKo is a food agent with long-term memory that helps individuals and households decide what to eat, coordinate preferences, create grocery baskets and improve future purchases.
 
-Unlike a traditional shopping assistant, MiyKo coordinates the complete food workflow:
+Unlike a traditional shopping assistant, MiyKo coordinates the complete workflow:
 
 ```text
 food event → managed workflow → household approval → provider action → memory update
@@ -84,7 +84,7 @@ Users can start a managed workflow from a future food event without immediately 
 
 Household members can:
 
-- view active food workflows;
+- view active workflows;
 - add requests;
 - request additions, replacements or fulfillment changes;
 - approve or reject provider actions according to their role.
@@ -353,7 +353,7 @@ Follow-up notifications are deferred from the core MVP. If enabled later, a noti
 - household invitation;
 - one connected Silpo account;
 - Mem0 memory extraction and retrieval;
-- natural-language food workflow;
+- natural-language workflow;
 - managed Silpo MCP recipe/product/basket interaction;
 - member item request;
 - owner approve/decline;

@@ -1,6 +1,6 @@
 import type { ApiResponse, CreateHouseholdResponse, HouseholdInvitation, InviteMemberRequest, LoginResponse, MemoryWriteRequest, ProviderAuthRequest, RegisterRequest, WorkflowActionRequest } from "@miyko/contracts";
 import { clearStoredSession, getStoredSession } from "@/api/session-storage";
-import type { ApiAudioProcessResponse, ApiDashboard, ApiHouseholdMember, ApiHouseholdSummary, ApiInvitation, ApiInvitationCreateResponse, ApiProvider, ApiProviderAccountsResponse, ApiProviderConnectionResponse, ApiWorkflow } from "@/api/types";
+import type { ApiAudioProcessResponse, ApiDashboard, ApiHouseholdMember, ApiHouseholdSummary, ApiInvitation, ApiInvitationCreateResponse, ApiMemoryStatus, ApiProvider, ApiProviderAccountsResponse, ApiProviderConnectionResponse, ApiWorkflow } from "@/api/types";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "");
 
@@ -9,6 +9,8 @@ export class ApiError extends Error {
 }
 
 type RequestOptions = Omit<RequestInit, "body"> & { body?: unknown; authenticated?: boolean };
+
+const idempotencyKey = () => `app-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
 async function request<T>(path: string, options: RequestOptions = {}) {
   if (!API_URL) throw new ApiError("API URL is not configured.", 0, "API_URL_MISSING");
@@ -59,13 +61,13 @@ export const api = {
     list: () => request<ApiWorkflow[]>("/workflows"),
     get: (id: string) => request<{ workflow: ApiWorkflow }>(`/workflows/${encodeURIComponent(id)}`),
     create: (text: string, source: "text" | "audio" = "text") => request<{ workflow: ApiWorkflow }>("/workflows", { method: "POST", body: { text, source } }),
-    action: (id: string, body: WorkflowActionRequest) => request<{ workflow: ApiWorkflow }>(`/workflows/${encodeURIComponent(id)}/actions`, { method: "POST", body }),
+    action: (id: string, body: WorkflowActionRequest, key = idempotencyKey()) => request<{ workflow: ApiWorkflow }>(`/workflows/${encodeURIComponent(id)}/actions`, { method: "POST", headers: { "Idempotency-Key": key }, body }),
   },
   audio: {
     process: (body: { fileName: string; mimeType: "audio/m4a" | "audio/mpeg" | "audio/wav" | "audio/webm"; durationSeconds: number; audioBase64: string }) => request<ApiAudioProcessResponse>("/audio/process", { method: "POST", body }),
   },
   memory: {
-    status: () => request<{ provider: string; managed: boolean }>("/memory/status"),
+    status: () => request<ApiMemoryStatus>("/memory/status"),
     read: (query: string, memberId?: string) => request<unknown>(`/memory?query=${encodeURIComponent(query)}${memberId ? `&memberId=${encodeURIComponent(memberId)}` : ""}`),
     write: (body: MemoryWriteRequest) => request("/memory", { method: "POST", body }),
   },

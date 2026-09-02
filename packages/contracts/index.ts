@@ -91,12 +91,13 @@ export type Workflow = {
   updatedAt: ISODateString;
   approvals: WorkflowApproval[];
 };
+export type WorkflowProviderAction = { type: "provider_action"; requestId?: string; intent: string };
 export type WorkflowAction =
-  | { type: "provider_action"; requestId?: string; payload?: Record<string, unknown> }
+  | WorkflowProviderAction
   | { type: "fulfillment_selected"; mode: "pickup" | "delivery" }
   | { type: "delivery_slot_selected"; scheduledFrom: ISODateString; scheduledTo: ISODateString }
-  | { type: "approve" }
-  | { type: "decline" };
+  | { type: "approve"; approvalId: UUID }
+  | { type: "decline"; approvalId: UUID };
 export type CreateWorkflowRequest = { text: string; providerSlug?: string; source?: "text" | "audio" };
 export type WorkflowActionRequest = WorkflowAction;
 export type WorkflowResponse = { workflow: Workflow };

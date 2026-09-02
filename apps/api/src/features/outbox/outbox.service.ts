@@ -1,7 +1,7 @@
-import { and, asc, desc, eq, inArray, lte, or, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray } from 'drizzle-orm'
 import { outboxEvents } from '@miyko/database/schema'
 import type { JsonObject } from '@miyko/database/schema'
-import type { OutboxEvent, RequestContext } from '@miyko/contracts'
+import type { OutboxEvent } from '@miyko/contracts'
 import { db } from '../../lib/database.js'
 
 const toEvent = (row: typeof outboxEvents.$inferSelect): OutboxEvent => ({
@@ -71,47 +71,6 @@ export class OutboxService {
         eq(outboxEvents.eventType, input.eventType),
         eq(outboxEvents.version, version),
       ),
-    })
-  }
-
-  async listPending(context: RequestContext, limit = 100) {
-    const now = new Date()
-    const rows = await db.query.outboxEvents.findMany({
-      where: and(
-        eq(outboxEvents.householdId, context.household.id),
-        or(
-          and(inArray(outboxEvents.status, ['pending', 'retrying']), lte(outboxEvents.availableAt, now)),
-          and(eq(outboxEvents.status, 'processing'), lte(outboxEvents.claimExpiresAt, now)),
-        ),
-      ),
-      orderBy: [asc(outboxEvents.availableAt), asc(outboxEvents.createdAt)],
-      limit,
-    })
-    return rows.map(toEvent)
-  }
-
-  async claim(context: RequestContext, workerId: string, limit = 25, leaseMs = 60_000) {
-    const now = new Date()
-    const leaseExpiresAt = new Date(now.getTime() + leaseMs)
-    return db.transaction(async (tx) => {
-      const rows = await tx.select().from(outboxEvents).where(and(
-        eq(outboxEvents.householdId, context.household.id),
-        or(
-          and(inArray(outboxEvents.status, ['pending', 'retrying']), lte(outboxEvents.availableAt, now)),
-          and(eq(outboxEvents.status, 'processing'), lte(outboxEvents.claimExpiresAt, now)),
-        ),
-      )).orderBy(asc(outboxEvents.availableAt), asc(outboxEvents.createdAt)).limit(limit).for('update', { skipLocked: true })
-
-      if (rows.length === 0) return []
-      return tx.update(outboxEvents).set({
-        status: 'processing',
-        attempts: sql`${outboxEvents.attempts} + 1`,
-        claimedAt: now,
-        claimedBy: workerId,
-        claimExpiresAt: leaseExpiresAt,
-        lastError: null,
-        updatedAt: now,
-      }).where(and(eq(outboxEvents.householdId, context.household.id), inArray(outboxEvents.id, rows.map((row) => row.id)))).returning()
     })
   }
 

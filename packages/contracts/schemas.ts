@@ -19,12 +19,18 @@ export const userProviderAccountSchema = z.object({
 export const providerConnectionResponseSchema = z.object({ provider: providerSchema, account: userProviderAccountSchema }).strict();
 export const providerAccountsResponseSchema = z.object({ items: z.array(userProviderAccountSchema.extend({ provider: providerSchema })) }).strict();
 
+const providerActionSchema = z.object({
+  type: z.literal("provider_action"),
+  requestId: z.string().min(1).max(255).optional(),
+  intent: z.string().trim().min(1).max(500),
+}).strict();
+
 export const workflowActionSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("provider_action"), requestId: z.string().min(1).max(255).optional(), payload: z.record(z.unknown()).optional() }).strict(),
+  providerActionSchema,
   z.object({ type: z.literal("fulfillment_selected"), mode: z.enum(["pickup", "delivery"]) }).strict(),
   z.object({ type: z.literal("delivery_slot_selected"), scheduledFrom: isoDate, scheduledTo: isoDate }).strict().refine((value) => value.scheduledTo >= value.scheduledFrom, "Delivery slot end must not precede its start"),
-  z.object({ type: z.literal("approve") }).strict(),
-  z.object({ type: z.literal("decline") }).strict(),
+  z.object({ type: z.literal("approve"), approvalId: uuid }).strict(),
+  z.object({ type: z.literal("decline"), approvalId: uuid }).strict(),
 ]);
 
 export const createWorkflowSchema = z.object({

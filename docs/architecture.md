@@ -1,5 +1,7 @@
 # MiyKo architecture
 
+The deployed graph setup and API payload contract are documented in [graph.md](graph.md) and [graph-contract.md](graph-contract.md).
+
 ## Ownership rule
 
 MiyKo is a household control plane around managed agent workflows. It does not become a recipe database, product catalog or order-management system.
@@ -21,7 +23,7 @@ PostgreSQL stores only a small control-plane projection: the household, provider
 login/register
   → create or join household
   → connect and bind a store provider
-  → create one food workflow for the request
+  → create one workflow for the request
   → LangGraph uses Mem0 context and reads current Silpo MCP state
   → graph pauses for a replacement, fulfillment mode, delivery slot or provider action
   → household member requests approval
@@ -30,7 +32,9 @@ login/register
   → only then does MCP mutate the basket or finish the order
 ```
 
-The initial food request is a normal workflow input. “Add ice cream” is a workflow action, not a local product search. The graph/provider resolves the item and returns the current basket. MiyKo only records that an approval was requested and whether the owner approved it.
+The initial request is a normal workflow input. “Add ice cream” is a workflow action, not a local product search. The graph/provider resolves the item and returns the current basket. MiyKo only records that an approval was requested and whether the owner approved it.
+
+A member action is not itself an approval decision. The API forwards the action to the same LangGraph thread; an approval projection is created only when LangGraph returns an interrupt that requires household approval.
 
 ## Projection and cache boundary
 
@@ -63,7 +67,7 @@ The provider registry remains useful because it resolves provider-specific authe
 - the action category;
 - the decision and deciding member.
 
-The outbox is a retry transport, not durable workflow state. Events are processed oldest-first, one at a time per registered request context, with a lease and capped backoff. A failed provider/graph call remains retryable and never creates a local copy of the external basket. Any local status is only the last observed result.
+The outbox is a retry transport, not durable workflow state. The API worker claims events oldest-first through the scoped database claim function, then opens a transaction-local RLS context for the active household member. Events use a lease and capped backoff; a failed provider/graph call remains retryable and never creates a local copy of the external basket. Any local status is only the last observed result.
 
 ## Memory boundary
 

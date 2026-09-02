@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import {
   connectedProviderAccounts,
-  shoppingProviders,
+  providers,
   userProviderAccounts,
 } from '@miyko/database/schema'
 import type {
@@ -19,7 +19,7 @@ import { providerSecretStorage } from './provider-secret.storage.js'
 import { storeProviderRegistry } from './store-provider.registry.js'
 import type { ProviderTokenSet, StoreProvider } from './store-provider.types.js'
 
-const toProvider = (row: typeof shoppingProviders.$inferSelect): Provider => ({
+const toProvider = (row: typeof providers.$inferSelect): Provider => ({
   id: row.id,
   name: row.name,
   slug: row.slug,
@@ -42,7 +42,7 @@ const toAccount = (row: typeof userProviderAccounts.$inferSelect): UserProviderA
 
 export class StoreProviderService {
   async listProviders(): Promise<Provider[]> {
-    const rows = await db.query.shoppingProviders.findMany({ where: eq(shoppingProviders.status, 'active') })
+    const rows = await db.query.providers.findMany({ where: eq(providers.status, 'active') })
     return rows.map(toProvider)
   }
 
@@ -95,7 +95,7 @@ export class StoreProviderService {
     const accounts = await db.query.userProviderAccounts.findMany({ where: and(eq(userProviderAccounts.userId, userId), eq(userProviderAccounts.status, 'active')) })
     for (const account of accounts) {
       if (!(await providerSecretStorage.load(account.id))) continue
-      const provider = await db.query.shoppingProviders.findFirst({ where: eq(shoppingProviders.id, account.providerId) })
+      const provider = await db.query.providers.findFirst({ where: eq(providers.id, account.providerId) })
       if (!provider) continue
       const existing = await db.query.connectedProviderAccounts.findFirst({
         where: and(
@@ -126,14 +126,14 @@ export class StoreProviderService {
       where: and(eq(connectedProviderAccounts.householdId, context.household.id), eq(connectedProviderAccounts.status, 'active')),
       with: { provider: true, userProviderAccount: true },
     })
-    const connection = connections.find((item) => (!providerSlug || item.provider?.slug === providerSlug) && item.provider?.status === 'active' && item.userProviderAccount?.status === 'active')
+    const connection = connections.find((item) => (!providerSlug || item.provider?.slug === providerSlug) && item.provider?.status === 'active' && item.userProviderAccount?.status === 'active' && item.userProviderAccount.userId === context.user.id)
     if (!connection?.provider) throw providerNotConnected()
     return { id: connection.provider.id, slug: connection.provider.slug }
   }
 
-  private async resolve(providerSlug: string): Promise<{ providerRow: typeof shoppingProviders.$inferSelect; provider: StoreProvider }> {
+  private async resolve(providerSlug: string): Promise<{ providerRow: typeof providers.$inferSelect; provider: StoreProvider }> {
     const provider = storeProviderRegistry.get(providerSlug)
-    const providerRow = await db.query.shoppingProviders.findFirst({ where: and(eq(shoppingProviders.slug, providerSlug), eq(shoppingProviders.status, 'active')) })
+    const providerRow = await db.query.providers.findFirst({ where: and(eq(providers.slug, providerSlug), eq(providers.status, 'active')) })
     if (!providerRow) throw notFound('Store provider')
     return { providerRow, provider }
   }

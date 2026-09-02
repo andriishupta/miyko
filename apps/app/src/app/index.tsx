@@ -54,7 +54,7 @@ export default function LoginScreen() {
       <View style={{ gap: Spacing.five }}>
         <MiykoLogo />
         <View style={{ gap: Spacing.two }}>
-          <MiykoText variant="hero">Food workflows that remember.</MiykoText>
+          <MiykoText variant="hero">Workflows that remember.</MiykoText>
           <MiykoText variant="body" color="textSecondary">One shared space for what your household wants to eat, buy and repeat.</MiykoText>
         </View>
         <Surface>

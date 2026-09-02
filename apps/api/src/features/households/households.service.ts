@@ -6,7 +6,6 @@ import { db } from '../../lib/database.js'
 import { forbidden, notFound } from '../../lib/errors.js'
 import { sha256 } from '../auth/auth.service.js'
 import { toContractHousehold, toContractMember, toContractMembership } from '../../lib/serializers.js'
-import { storeProviderService } from '../../integrations/store-providers/store-provider.service.js'
 
 const toInvitation = (row: typeof householdInvitations.$inferSelect): HouseholdInvitation => ({
   id: row.id, householdId: row.householdId, inviterId: row.inviterId, inviteeUserId: row.inviteeUserId, inviteeEmail: row.inviteeEmail,
@@ -22,7 +21,6 @@ export class HouseholdsService {
       const memberRows = await tx.insert(householdMembers).values({ householdId: household.id, userId: user.id, role: 'owner', status: 'active' }).returning()
       return { household, member: memberRows[0] }
     })
-    await storeProviderService.bindToHousehold(user.id, household.id, member.id)
     return { household: toContractHousehold(household), membership: toContractMembership(member) }
   }
 
@@ -72,7 +70,6 @@ export class HouseholdsService {
       await tx.update(householdInvitations).set({ inviteeUserId: user.id, inviteeEmail: null, status: 'accepted', acceptedAt: new Date(), updatedAt: new Date() }).where(eq(householdInvitations.id, invitation.id))
       return toInvitation({ ...invitation, inviteeUserId: user.id, inviteeEmail: null, status: 'accepted', acceptedAt: new Date() })
     })
-    await storeProviderService.bindToHousehold(user.id, invitation.householdId, memberId)
     return result
   }
 }

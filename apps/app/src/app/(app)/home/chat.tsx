@@ -1,15 +1,16 @@
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, TextInput } from "react-native-paper";
 import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { api, ApiError } from "@/api/client";
 import type { ApiWorkflow } from "@/api/types";
-import { AppIcon, IconButton, MiykoText, ScreenScroll, StatusPill, Surface } from "@/components/miyko-ui";
+import { AppIcon, IconButton, MiykoText, ScreenScroll, SecondaryButton, StatusPill, Surface } from "@/components/miyko-ui";
 import { Radius, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 
 export default function ChatScreen() {
+  const router = useRouter();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const [message, setMessage] = useState("");
@@ -35,7 +36,7 @@ export default function ChatScreen() {
       {submittedMessage && <Surface style={[styles.messageBubble, { alignSelf: "flex-end", backgroundColor: theme.accentSoft }]}><MiykoText variant="caption" color="accent">You</MiykoText><MiykoText variant="body">{submittedMessage}</MiykoText></Surface>}
       {loading && <Surface style={styles.response}><ActivityIndicator color={theme.accent} /><MiykoText variant="body" color="textSecondary">Starting the managed LangGraph workflow…</MiykoText></Surface>}
       {error && <Surface style={styles.response}><StatusPill label="API unavailable" tone="warning" /><MiykoText variant="body" color="danger">{error}</MiykoText></Surface>}
-      {workflow && <Surface style={styles.response}><View style={styles.responseHeader}><MiykoText variant="section">Workflow started</MiykoText><StatusPill label={workflow.status} tone={workflow.status === "interrupted" ? "warning" : "accent"} /></View><MiykoText variant="body" color="textSecondary">LangGraph owns the conversation, recipe, basket and pause/resume state.</MiykoText><MiykoText variant="caption" color="textSecondary">Workflow ID: {workflow.id}</MiykoText></Surface>}
+      {workflow && <Surface style={styles.response}><View style={styles.responseHeader}><MiykoText variant="section">Workflow started</MiykoText><StatusPill label={workflow.status} tone={workflow.status === "interrupted" ? "warning" : "accent"} /></View><MiykoText variant="body" color="textSecondary">LangGraph owns the conversation, recipe, basket and pause/resume state.</MiykoText><MiykoText variant="caption" color="textSecondary">Workflow ID: {workflow.id}</MiykoText><SecondaryButton label="Open workflow" onPress={() => router.push(`/home/workflows/${workflow.id}`)} /></Surface>}
       <View style={styles.composer}><TextInput mode="outlined" value={message} onChangeText={setMessage} placeholder="Write a food request…" textColor={theme.text} outlineColor={theme.border} activeOutlineColor={theme.accent} contentStyle={styles.inputContent} outlineStyle={styles.inputOutline} style={styles.input} onSubmitEditing={() => void sendMessage()} /><IconButton name="arrow" label="Send request" onPress={() => void sendMessage()} /></View>
     </ScreenScroll>
   </>;

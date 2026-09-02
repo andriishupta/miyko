@@ -1,6 +1,6 @@
 # MiyKo API
 
-Hono API for authentication, household access, provider connections and the thin control plane around managed food workflows. Workflow memory and checkpoints stay in managed services.
+Hono API for authentication, household access, provider connections and the thin control plane around managed workflows. Workflow memory and checkpoints stay in managed services.
 
 ## Runtime boundary
 
@@ -25,17 +25,17 @@ Missing required configuration fails explicitly. No environment-based mock or fa
 ## Routes
 
 - Public/auth bootstrap: `/health`, `/auth/*`, `/onboarding/households`, `/invitations/*`.
-- Provider connection: `/providers`, `/providers/accounts`, `/:providerSlug/tools`, `connect`, `reauthorize`, `bind` and disconnect.
+- Provider connection: `/providers`, `/providers/accounts`, `/:providerSlug/tools`, `connect`, `reauthorize`, `bind` and disconnect. Product, basket, order and fulfillment tools are not exposed as API routes; the managed LangGraph workflow owns those calls.
 - Managed workflow: `GET/POST /workflows`, `GET /workflows/:workflowId` and `POST /workflows/:workflowId/actions`.
 - Supporting surfaces: `/dashboard`, `/household`, `/audio/process` and `/memory`.
 
-Starting a workflow creates one deterministic UUID. The same UUID is used as the LangGraph thread ID. The database stores only that external reference and the latest observed run/status. An action creates an approval projection when needed and is delivered to the graph through the outbox. Owner approval is required before provider-mutating actions.
+Starting a workflow creates one deterministic UUID. The same UUID is used as the LangGraph thread ID. The database stores only that external reference and the latest observed run/status. Member actions are delivered to the graph through the outbox; an approval projection is created only when LangGraph returns an interrupt that requires approval. Owner approval is required before provider-mutating actions.
 
 ## Flow
 
 ```text
 login/register → create or join household → connect/bind Silpo
-  → create one food workflow for the request
+  → create one workflow for the request
   → LangGraph + Mem0 + Silpo MCP
   → interrupt for replacement / fulfillment / delivery slot / approval
   → owner approves or declines
@@ -43,7 +43,9 @@ login/register → create or join household → connect/bind Silpo
   → provider MCP updates basket or completes order
 ```
 
-The outbox worker polls every five seconds, claims the oldest available event, calls the managed workflow boundary and retries failures with capped backoff. It is transport reliability only; it is not a second durable-state store. Background webhook/status synchronization is intentionally deferred.
+The in-process outbox worker polls every five seconds and claims the oldest available event through `public.miyko_claim_outbox_events(worker_id, limit, lease_ms)`. That narrowly scoped `SECURITY DEFINER` function is callable by `api_role`, uses `FOR UPDATE SKIP LOCKED`, sets a lease and returns an active household member identity with the event row. The API then opens a transaction-local `app.user_id` context for the handler; it never uses a migration owner or a `BYPASSRLS` connection. Missing worker database support is an explicit startup/runtime error, not a fallback.
+
+Events are idempotent at the outbox boundary: workflow start uses the deterministic workflow/thread UUID, actions require `Idempotency-Key`, and graph runs are looked up by the source event ID before a new run is created. Claims move through `processing`, `retrying`, `published` or `dead_letter` with attempts, safe last-error codes, a lease and capped exponential backoff. Unknown event types are dead-lettered. The worker can later be moved into a separate process without changing the event handler boundary.
 
 The API may later add a bounded TTL cache for repeated provider reads. Cached values and the workflow projection are informational and must be refreshed/revalidated by the managed workflow before a basket or order mutation.
 

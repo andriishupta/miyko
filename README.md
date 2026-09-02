@@ -38,6 +38,7 @@ docs/           product and architecture decisions
 ```
 
 See [docs/architecture.md](docs/architecture.md) for the boundaries and [docs/prd.md](docs/prd.md) for product requirements.
+Graph deployment and workflow details are in [docs/graph.md](docs/graph.md), and the API boundary is in [docs/graph-contract.md](docs/graph-contract.md).
 
 ## Security
 

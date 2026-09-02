@@ -50,9 +50,9 @@ export function PrimaryButton({ label, onPress, loading = false, disabled = fals
   return <Button accessibilityRole="button" mode="contained" onPress={onPress} disabled={loading || disabled} loading={loading} buttonColor={theme.accent} textColor={theme.accentContrast} icon={icon ? () => <AppIcon name={icon} size={18} color={theme.accentContrast} /> : undefined} contentStyle={styles.buttonContent} style={styles.primaryButton} labelStyle={styles.buttonLabel} uppercase={false}>{loading ? 'Opening…' : label}</Button>;
 }
 
-export function SecondaryButton({ label, onPress, icon }: { label: string; onPress: () => void; icon?: SymbolName }) {
+export function SecondaryButton({ label, onPress, icon, disabled = false }: { label: string; onPress: () => void; icon?: SymbolName; disabled?: boolean }) {
   const theme = useTheme();
-  return <Button accessibilityRole="button" mode="outlined" onPress={onPress} textColor={theme.accent} icon={icon ? () => <AppIcon name={icon} size={17} color={theme.accent} /> : undefined} contentStyle={styles.buttonContent} style={[styles.secondaryButton, { borderColor: theme.border }]} labelStyle={styles.buttonLabel} uppercase={false}>{label}</Button>;
+  return <Button accessibilityRole="button" mode="outlined" onPress={onPress} disabled={disabled} textColor={theme.accent} icon={icon ? () => <AppIcon name={icon} size={17} color={theme.accent} /> : undefined} contentStyle={styles.buttonContent} style={[styles.secondaryButton, { borderColor: theme.border }]} labelStyle={styles.buttonLabel} uppercase={false}>{label}</Button>;
 }
 
 export function IconButton({ name, label, onPress }: { name: SymbolName; label: string; onPress: () => void }) {

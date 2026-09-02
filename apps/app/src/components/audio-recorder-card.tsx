@@ -4,6 +4,7 @@ import { File } from "expo-file-system";
 import { ActivityIndicator, FAB } from "react-native-paper";
 import { StyleSheet, View } from "react-native";
 import { api, ApiError } from "@/api/client";
+import type { ApiAudioProcessResponse } from "@/api/types";
 import { AppIcon, MiykoText, StatusPill, Surface } from "@/components/miyko-ui";
 import { Radius, Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
@@ -55,8 +56,8 @@ export function AudioRecorderCard() {
     <MiykoText variant="caption" color="textSecondary" style={styles.center}>{recorderState.isRecording ? `${Math.round(recorderState.durationMillis / 1000)}s · Tap to stop` : uploading ? "Starting the managed workflow…" : "Your recording is sent to the API."}</MiykoText>
     {uploading && <ActivityIndicator color={theme.accent} />}
     {error && <MiykoText variant="caption" color="danger">{error}</MiykoText>}
-    {result && <Surface style={styles.result}><View style={styles.resultHeader}><MiykoText variant="section">Workflow started</MiykoText><StatusPill label="Managed" tone="success" /></View><MiykoText variant="body">{result.transcript}</MiykoText><MiykoText variant="caption" color="textSecondary">Workflow ID: {result.workflowId}</MiykoText></Surface>}
+    {result && <Surface style={styles.result}><View style={styles.resultHeader}><MiykoText variant="section">Workflow started</MiykoText><StatusPill label="Managed" tone="success" /></View><View style={styles.resultBlock}><MiykoText variant="caption" color="textSecondary">Transcript</MiykoText><MiykoText variant="body">{result.transcript}</MiykoText></View><MiykoText variant="caption" color="textSecondary">Workflow ID: {result.workflowId}</MiykoText></Surface>}
   </View>;
 }
 
-const styles = StyleSheet.create({ container: { alignItems: "center", gap: Spacing.two, paddingVertical: Spacing.three }, audioButton: { width: 84, height: 84, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center" }, center: { textAlign: "center" }, result: { width: "100%", gap: Spacing.two }, resultHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: Spacing.two } });
+const styles = StyleSheet.create({ container: { alignItems: "center", gap: Spacing.two, paddingVertical: Spacing.three }, audioButton: { width: 84, height: 84, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center" }, center: { textAlign: "center" }, result: { width: "100%", gap: Spacing.two }, resultHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: Spacing.two }, resultBlock: { gap: Spacing.one } });

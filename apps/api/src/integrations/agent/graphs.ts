@@ -1,7 +1,8 @@
 import { Client } from "@langchain/langgraph-sdk";
+import { z } from "zod";
 import { AppError } from "../../lib/errors.js";
 import { requireAgentConfig } from "./agent.config.js";
-import type { AgentLayer, WorkflowAction, WorkflowInput, WorkflowReference } from "./agent.port.js";
+import type { AgentLayer, WorkflowAction, WorkflowInput, WorkflowInterrupt, WorkflowReference } from "./agent.port.js";
 
 const clientFor = () => {
   const config = requireAgentConfig();
@@ -11,13 +12,62 @@ const clientFor = () => {
 const statusOf = (status: string): WorkflowReference["status"] => {
   if (["pending", "running", "interrupted", "succeeded", "failed", "cancelled"].includes(status)) return status as WorkflowReference["status"];
   if (status === "success") return "succeeded";
-  if (status === "error") return "failed";
+  if (status === "error" || status === "timeout") return "failed";
   throw new AppError("AGENT_INVALID_RESPONSE", "LangGraph Cloud returned an unsupported workflow status", 502);
 };
 
 const existingRun = async (client: Client, threadId: string, eventId: string) => {
   const runs = await client.runs.list(threadId, { limit: 100 });
   return runs.find((run) => run.metadata?.sourceEventId === eventId);
+};
+
+const interruptValueSchema = z.object({
+  requestId: z.string().min(1).max(255).optional(),
+  externalRequestId: z.string().min(1).max(255).optional(),
+  action: z.enum(["provider_action", "fulfillment", "delivery_slot"]).optional(),
+  type: z.enum(["provider_action", "fulfillment", "delivery_slot"]).optional(),
+  category: z.enum(["provider_action", "fulfillment", "delivery_slot"]).optional(),
+}).passthrough();
+
+const interruptSchema = z.object({
+  id: z.string().min(1).max(255).optional(),
+  value: z.unknown().optional(),
+}).passthrough();
+
+const parseInterrupt = (candidate: unknown): WorkflowInterrupt => {
+  const parsed = interruptSchema.safeParse(candidate);
+  if (!parsed.success) throw new AppError("AGENT_INVALID_INTERRUPT", "LangGraph returned an invalid interrupt", 502);
+
+  const value = interruptValueSchema.safeParse(parsed.data.value);
+  if (!value.success) throw new AppError("AGENT_INVALID_INTERRUPT", "LangGraph returned an invalid interrupt value", 502);
+
+  const action = value.data.action ?? value.data.type ?? value.data.category;
+  if (!action) throw new AppError("AGENT_INVALID_INTERRUPT", "LangGraph interrupt has no supported action", 502);
+
+  return {
+    action,
+    externalRequestId: value.data.externalRequestId ?? value.data.requestId ?? parsed.data.id ?? null,
+  };
+};
+
+const observeRun = async (client: Client, threadId: string, runId: string) => {
+  // `join` makes the API boundary observe the managed run result instead of
+  // treating the asynchronous create response as workflow state.
+  await client.runs.join(threadId, runId);
+  const run = await client.runs.get(threadId, runId);
+  const thread = await client.threads.get(threadId);
+  const pendingInterrupts = Object.values(thread.interrupts ?? {}).flat();
+  const interrupt = pendingInterrupts.at(-1);
+  const status = thread.status === "interrupted"
+    ? "interrupted"
+    : thread.status === "error"
+      ? "failed"
+      : statusOf(run.status);
+
+  return {
+    status,
+    interrupt: status === "interrupted" ? parseInterrupt(interrupt) : undefined,
+  } satisfies Pick<WorkflowReference, "status" | "interrupt">;
 };
 
 const start = async (input: WorkflowInput): Promise<WorkflowReference> => {
@@ -33,7 +83,8 @@ const start = async (input: WorkflowInput): Promise<WorkflowReference> => {
     durability: "sync",
     multitaskStrategy: "enqueue",
   });
-  return { provider: "langgraph", threadId: thread.thread_id, runId: run.run_id, status: statusOf(run.status) };
+  const observed = await observeRun(client, thread.thread_id, run.run_id);
+  return { provider: "langgraph", threadId: thread.thread_id, runId: run.run_id, ...observed };
 };
 
 const resume = async (input: WorkflowInput & { threadId: string; action: WorkflowAction }): Promise<WorkflowReference> => {
@@ -44,7 +95,8 @@ const resume = async (input: WorkflowInput & { threadId: string; action: Workflo
     durability: "sync",
     multitaskStrategy: "enqueue",
   });
-  return { provider: "langgraph", threadId: input.threadId, runId: run.run_id, status: statusOf(run.status) };
+  const observed = await observeRun(client, input.threadId, run.run_id);
+  return { provider: "langgraph", threadId: input.threadId, runId: run.run_id, ...observed };
 };
 
 export const createAgentLayer = (): AgentLayer => ({ startWorkflow: start, resumeWorkflow: resume });

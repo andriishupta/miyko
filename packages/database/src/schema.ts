@@ -142,7 +142,7 @@ export const householdInvitations = pgTable("household_invitations", {
   pgPolicy("household_invitations_delete", { for: "delete", using: isMember(table.householdId) }),
 ]).enableRLS();
 
-export const shoppingProviders = pgTable("providers", {
+export const providers = pgTable("providers", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: varchar("name", { length: 80 }).notNull(),
   slug: varchar("slug", { length: 80 }).notNull(),
@@ -159,7 +159,7 @@ export const shoppingProviders = pgTable("providers", {
 export const userProviderAccounts = pgTable("user_providers", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  providerId: uuid("provider_id").notNull().references(() => shoppingProviders.id, { onDelete: "restrict" }),
+  providerId: uuid("provider_id").notNull().references(() => providers.id, { onDelete: "restrict" }),
   providerSubject: varchar("provider_subject", { length: 255 }),
   accountLogin: varchar("account_login", { length: 320 }),
   authMethod: providerAuthMethodEnum("auth_method").notNull(),
@@ -199,7 +199,7 @@ export const providerSecrets = pgTable("provider_secrets", {
 export const connectedProviderAccounts = pgTable("connected_provider_accounts", {
   id: uuid("id").primaryKey().defaultRandom(),
   householdId: uuid("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
-  providerId: uuid("provider_id").notNull().references(() => shoppingProviders.id, { onDelete: "restrict" }),
+  providerId: uuid("provider_id").notNull().references(() => providers.id, { onDelete: "restrict" }),
   userProviderAccountId: uuid("user_provider_account_id").references(() => userProviderAccounts.id, { onDelete: "set null" }),
   authorizedByMemberId: uuid("authorized_by_member_id").notNull().references(() => householdMembers.id, { onDelete: "restrict" }),
   status: providerAccountStatusEnum("status").notNull().default("active"),
@@ -215,7 +215,7 @@ export const connectedProviderAccounts = pgTable("connected_provider_accounts", 
 export const householdProviderSettings = pgTable("household_provider_settings", {
   id: uuid("id").primaryKey().defaultRandom(),
   householdId: uuid("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
-  providerId: uuid("provider_id").notNull().references(() => shoppingProviders.id, { onDelete: "restrict" }),
+  providerId: uuid("provider_id").notNull().references(() => providers.id, { onDelete: "restrict" }),
   selectedAccountId: uuid("selected_account_id").references(() => connectedProviderAccounts.id, { onDelete: "set null" }),
   createdAt: now("created_at"),
   updatedAt: now("updated_at"),
@@ -229,7 +229,7 @@ export const workflows = pgTable("workflows", {
   id: uuid("id").primaryKey().defaultRandom(),
   householdId: uuid("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
   startedByMemberId: uuid("started_by_member_id").notNull().references(() => householdMembers.id, { onDelete: "restrict" }),
-  providerId: uuid("provider_id").notNull().references(() => shoppingProviders.id, { onDelete: "restrict" }),
+  providerId: uuid("provider_id").notNull().references(() => providers.id, { onDelete: "restrict" }),
   status: workflowStatusEnum("status").notNull().default("pending"),
   threadId: varchar("thread_id", { length: 255 }).notNull(),
   runId: varchar("run_id", { length: 255 }),
@@ -288,7 +288,7 @@ export const outboxEvents = pgTable("outbox_events", {
 }, (table) => [
   ...householdPolicies("outbox_events", table.householdId),
   uniqueIndex("outbox_events_aggregate_transition_uq").on(table.aggregateType, table.aggregateId, table.eventType, table.version),
-  index("outbox_events_pending_idx").on(table.status, table.availableAt),
+  index("outbox_events_claim_idx").on(table.status, table.availableAt, table.claimExpiresAt),
   check("outbox_events_claim_consistency", sql`(${table.claimedAt} IS NULL AND ${table.claimedBy} IS NULL AND ${table.claimExpiresAt} IS NULL) OR (${table.claimedAt} IS NOT NULL AND ${table.claimedBy} IS NOT NULL AND ${table.claimExpiresAt} IS NOT NULL)`),
 ]).enableRLS();
 
@@ -312,22 +312,22 @@ export const userSessionsRelations = relations(userSessions, ({ one }) => ({ use
 export const householdsRelations = relations(households, ({ one, many }) => ({ owner: one(users, { fields: [households.ownerId], references: [users.id] }), members: many(householdMembers), invitations: many(householdInvitations), providerConnections: many(connectedProviderAccounts), workflows: many(workflows), approvals: many(workflowApprovals), outboxEvents: many(outboxEvents), auditLogs: many(auditLogs) }));
 export const householdMembersRelations = relations(householdMembers, ({ one, many }) => ({ household: one(households, { fields: [householdMembers.householdId], references: [households.id] }), user: one(users, { fields: [householdMembers.userId], references: [users.id] }), workflows: many(workflows), requestedApprovals: many(workflowApprovals, { relationName: "requestedApprovals" }), decidedApprovals: many(workflowApprovals, { relationName: "decidedApprovals" }) }));
 export const householdInvitationsRelations = relations(householdInvitations, ({ one }) => ({ household: one(households, { fields: [householdInvitations.householdId], references: [households.id] }), inviter: one(users, { fields: [householdInvitations.inviterId], references: [users.id] }), invitee: one(users, { fields: [householdInvitations.inviteeUserId], references: [users.id] }) }));
-export const shoppingProvidersRelations = relations(shoppingProviders, ({ many }) => ({ accounts: many(userProviderAccounts), connections: many(connectedProviderAccounts), settings: many(householdProviderSettings), workflows: many(workflows) }));
-export const userProviderAccountsRelations = relations(userProviderAccounts, ({ one, many }) => ({ user: one(users, { fields: [userProviderAccounts.userId], references: [users.id] }), provider: one(shoppingProviders, { fields: [userProviderAccounts.providerId], references: [shoppingProviders.id] }), secrets: many(providerSecrets), connections: many(connectedProviderAccounts) }));
+export const providersRelations = relations(providers, ({ many }) => ({ accounts: many(userProviderAccounts), connections: many(connectedProviderAccounts), settings: many(householdProviderSettings), workflows: many(workflows) }));
+export const userProviderAccountsRelations = relations(userProviderAccounts, ({ one, many }) => ({ user: one(users, { fields: [userProviderAccounts.userId], references: [users.id] }), provider: one(providers, { fields: [userProviderAccounts.providerId], references: [providers.id] }), secrets: many(providerSecrets), connections: many(connectedProviderAccounts) }));
 export const providerSecretsRelations = relations(providerSecrets, ({ one }) => ({ account: one(userProviderAccounts, { fields: [providerSecrets.userProviderAccountId], references: [userProviderAccounts.id] }) }));
-export const connectedProviderAccountsRelations = relations(connectedProviderAccounts, ({ one }) => ({ household: one(households, { fields: [connectedProviderAccounts.householdId], references: [households.id] }), provider: one(shoppingProviders, { fields: [connectedProviderAccounts.providerId], references: [shoppingProviders.id] }), userProviderAccount: one(userProviderAccounts, { fields: [connectedProviderAccounts.userProviderAccountId], references: [userProviderAccounts.id] }), authorizedByMember: one(householdMembers, { fields: [connectedProviderAccounts.authorizedByMemberId], references: [householdMembers.id] }) }));
-export const householdProviderSettingsRelations = relations(householdProviderSettings, ({ one }) => ({ household: one(households, { fields: [householdProviderSettings.householdId], references: [households.id] }), provider: one(shoppingProviders, { fields: [householdProviderSettings.providerId], references: [shoppingProviders.id] }), selectedAccount: one(connectedProviderAccounts, { fields: [householdProviderSettings.selectedAccountId], references: [connectedProviderAccounts.id] }) }));
-export const workflowsRelations = relations(workflows, ({ one, many }) => ({ household: one(households, { fields: [workflows.householdId], references: [households.id] }), startedByMember: one(householdMembers, { fields: [workflows.startedByMemberId], references: [householdMembers.id] }), provider: one(shoppingProviders, { fields: [workflows.providerId], references: [shoppingProviders.id] }), approvals: many(workflowApprovals) }));
+export const connectedProviderAccountsRelations = relations(connectedProviderAccounts, ({ one }) => ({ household: one(households, { fields: [connectedProviderAccounts.householdId], references: [households.id] }), provider: one(providers, { fields: [connectedProviderAccounts.providerId], references: [providers.id] }), userProviderAccount: one(userProviderAccounts, { fields: [connectedProviderAccounts.userProviderAccountId], references: [userProviderAccounts.id] }), authorizedByMember: one(householdMembers, { fields: [connectedProviderAccounts.authorizedByMemberId], references: [householdMembers.id] }) }));
+export const householdProviderSettingsRelations = relations(householdProviderSettings, ({ one }) => ({ household: one(households, { fields: [householdProviderSettings.householdId], references: [households.id] }), provider: one(providers, { fields: [householdProviderSettings.providerId], references: [providers.id] }), selectedAccount: one(connectedProviderAccounts, { fields: [householdProviderSettings.selectedAccountId], references: [connectedProviderAccounts.id] }) }));
+export const workflowsRelations = relations(workflows, ({ one, many }) => ({ household: one(households, { fields: [workflows.householdId], references: [households.id] }), startedByMember: one(householdMembers, { fields: [workflows.startedByMemberId], references: [householdMembers.id] }), provider: one(providers, { fields: [workflows.providerId], references: [providers.id] }), approvals: many(workflowApprovals) }));
 export const workflowApprovalsRelations = relations(workflowApprovals, ({ one }) => ({ household: one(households, { fields: [workflowApprovals.householdId], references: [households.id] }), workflow: one(workflows, { fields: [workflowApprovals.workflowId], references: [workflows.id] }), requestedByMember: one(householdMembers, { fields: [workflowApprovals.requestedByMemberId], references: [householdMembers.id], relationName: "requestedApprovals" }), decidedByMember: one(householdMembers, { fields: [workflowApprovals.decidedByMemberId], references: [householdMembers.id], relationName: "decidedApprovals" }) }));
 export const outboxEventsRelations = relations(outboxEvents, ({ one }) => ({ household: one(households, { fields: [outboxEvents.householdId], references: [households.id] }) }));
 export const auditLogsRelations = relations(auditLogs, ({ one }) => ({ household: one(households, { fields: [auditLogs.householdId], references: [households.id] }), actorMember: one(householdMembers, { fields: [auditLogs.actorMemberId], references: [householdMembers.id] }) }));
 
 export const schema = {
   users, userSessions, households, householdMembers, householdInvitations,
-  shoppingProviders, userProviderAccounts, providerSecrets, connectedProviderAccounts,
+  providers, userProviderAccounts, providerSecrets, connectedProviderAccounts,
   householdProviderSettings, workflows, workflowApprovals, outboxEvents, auditLogs,
   usersRelations, userSessionsRelations, householdsRelations, householdMembersRelations,
-  householdInvitationsRelations, shoppingProvidersRelations, userProviderAccountsRelations,
+  householdInvitationsRelations, providersRelations, userProviderAccountsRelations,
   providerSecretsRelations, connectedProviderAccountsRelations, householdProviderSettingsRelations,
   workflowsRelations, workflowApprovalsRelations, outboxEventsRelations,
   auditLogsRelations,

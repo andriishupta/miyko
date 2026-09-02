@@ -2,7 +2,7 @@
 
 Server-only Drizzle schema for MiyKo. The Expo app must never receive `DATABASE_URL`, session token hashes, provider credentials or encrypted secret values.
 
-The database is a control-plane store, not a food domain store. It contains:
+The database is a control-plane store, not a domain store. It contains:
 
 - users, sessions, households, members and invitations;
 - generic providers, encrypted provider secrets and household bindings;
@@ -17,6 +17,8 @@ Recipes, products, images, basket contents, current order state, delivery slots 
 All household-owned tables require active membership through `miyko_is_household_member`. Users and sessions are scoped to the current authenticated user. Authentication and onboarding helpers are narrowly scoped `SECURITY DEFINER` functions with a fixed search path. The API sets `app.user_id` inside its request transaction after validating the bearer session.
 
 Provider credentials are encrypted server-side and referenced only by the API. The runtime role is a non-owner `api_role` without `BYPASSRLS`; migrations use the separate administrative connection.
+
+The outbox worker claims events through the narrowly scoped `miyko_claim_outbox_events` database function. It uses row locking and a lease, returns an active household member identity for the RLS transaction, and is executable by `api_role` without giving that role migration-owner access.
 
 ## Schema workflow
 

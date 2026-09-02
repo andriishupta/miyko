@@ -25,5 +25,9 @@ export type ApiProviderAccountsResponse = ProviderAccountsResponse;
 export type ApiProviderConnectionResponse = ProviderConnectionResponse;
 export type ApiAudioProcessResponse = AudioProcessResponse;
 export type ApiWorkflow = Workflow;
+export type ApiMemoryStatus = {
+  provider: string;
+  managed: boolean;
+};
 export type ApiResponseShape<T> = ApiResponse<T>;
 export type ApiRegisterRequest = RegisterRequest;

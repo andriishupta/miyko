@@ -1,4 +1,5 @@
 import { z } from "zod";
-export { createWorkflowSchema, workflowActionSchema } from "@miyko/contracts/schemas";
+import { createWorkflowSchema, workflowActionSchema } from "@miyko/contracts/schemas";
+export { createWorkflowSchema, workflowActionSchema };
 
 export const workflowIdSchema = z.object({ workflowId: z.string().uuid() }).strict();

@@ -1,5 +1,5 @@
 import { createClient } from '@miyko/database/client'
-import { householdMembers, households, shoppingProviders, users } from '@miyko/database/schema'
+import { householdMembers, households, providers, users } from '@miyko/database/schema'
 import { hashPassword } from '../src/lib/password.js'
 
 const migrationUrl = process.env.MIGRATION_DATABASE_URL
@@ -48,14 +48,14 @@ try {
     }).onConflictDoNothing()
   }
 
-  await db.insert(shoppingProviders).values({
+  await db.insert(providers).values({
     id: providerId,
     name: 'Silpo',
     slug: 'silpo',
     status: 'active',
     capabilities: ['mcp'],
   }).onConflictDoUpdate({
-    target: shoppingProviders.id,
+    target: providers.id,
     set: { name: 'Silpo', slug: 'silpo', status: 'active', capabilities: ['mcp'], updatedAt: new Date() },
   })
 
