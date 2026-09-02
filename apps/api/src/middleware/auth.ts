@@ -6,6 +6,7 @@ import { forbidden, unauthorized } from '../lib/errors.js'
 import type { HouseholdRole } from '@miyko/contracts'
 import { toContractHousehold, toContractMembership, toContractUser } from '../lib/serializers.js'
 import { authService, sha256 } from '../features/auth/auth.service.js'
+import { outboxWorker } from '../features/outbox/outbox.worker.js'
 
 export const authMiddleware: MiddlewareHandler = async (c, next) => {
   const authorization = c.req.header('authorization')
@@ -38,7 +39,9 @@ export const householdContextMiddleware: MiddlewareHandler = async (c, next) => 
   const household = await db.query.households.findFirst({ where: eq(households.id, householdId) })
   const membership = await db.query.householdMembers.findFirst({ where: and(eq(householdMembers.userId, user.id), eq(householdMembers.householdId, householdId), eq(householdMembers.status, 'active')) })
   if (!household || !membership) throw forbidden()
-  c.set('requestContext', { requestId: c.get('requestId'), user, household: toContractHousehold(household), membership: toContractMembership(membership) })
+  const requestContext = { requestId: c.get('requestId'), user, household: toContractHousehold(household), membership: toContractMembership(membership) }
+  c.set('requestContext', requestContext)
+  outboxWorker.register(requestContext)
   await next()
 }
 

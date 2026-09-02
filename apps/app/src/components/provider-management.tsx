@@ -7,6 +7,7 @@ import type { ApiProvider, ApiProviderAccountsResponse } from '@/api/types';
 import { Field, MiykoText, PrimaryButton, SecondaryButton, StatusPill, Surface } from '@/components/miyko-ui';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { useOptionalProviderStatus } from '@/providers/provider-status-context';
 
 type ProviderManagementProps = {
   allowBind?: boolean;
@@ -16,6 +17,7 @@ type ProviderManagementProps = {
 
 export function ProviderManagement({ allowBind = false, onComplete, onSkip }: ProviderManagementProps) {
   const theme = useTheme();
+  const providerStatus = useOptionalProviderStatus();
   const [providers, setProviders] = useState<ApiProvider[]>([]);
   const [accounts, setAccounts] = useState<ApiProviderAccountsResponse['items']>([]);
   const [loading, setLoading] = useState(true);
@@ -65,6 +67,7 @@ export function ProviderManagement({ allowBind = false, onComplete, onSkip }: Pr
       setLogin('');
       setPassword('');
       await load();
+      await providerStatus?.refresh();
       onComplete?.();
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : `Could not connect ${provider.name}.`);
@@ -80,10 +83,27 @@ export function ProviderManagement({ allowBind = false, onComplete, onSkip }: Pr
     setMessage(null);
     try {
       await api.providers.bind(provider.slug);
+      await providerStatus?.refresh();
       setMessage(`${provider.name} is connected to this household.`);
       onComplete?.();
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : `Could not connect ${provider.name} to this household.`);
+    } finally {
+      setActiveSlug(null);
+    }
+  }
+
+  async function syncProvider(provider: ApiProvider) {
+    if (activeSlug) return;
+    setActiveSlug(provider.slug);
+    setError(null);
+    setMessage(null);
+    try {
+      const response = await api.providers.sync(provider.slug);
+      await providerStatus?.refresh();
+      setMessage(`${response.provider.name} sync requested.`);
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : `Could not sync ${provider.name}.`);
     } finally {
       setActiveSlug(null);
     }
@@ -97,6 +117,7 @@ export function ProviderManagement({ allowBind = false, onComplete, onSkip }: Pr
     try {
       await api.providers.disconnect(provider.slug);
       await load();
+      await providerStatus?.refresh();
       setMessage(`${provider.name} has been disconnected.`);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : `Could not disconnect ${provider.name}.`);
@@ -130,7 +151,10 @@ export function ProviderManagement({ allowBind = false, onComplete, onSkip }: Pr
               <View style={{ gap: Spacing.two }}>
                 <MiykoText variant="body" color="textSecondary">This provider account is ready to use.</MiykoText>
                 {allowBind && <PrimaryButton label="Use in this household" loading={isBusy} onPress={() => void bindProvider(provider)} icon="cart" />}
-                {!onSkip && <SecondaryButton label="Disconnect" onPress={() => void disconnectProvider(provider)} />}
+                {!onSkip && <>
+                  <SecondaryButton label="Sync provider" onPress={() => void syncProvider(provider)} />
+                  <SecondaryButton label="Disconnect" onPress={() => void disconnectProvider(provider)} />
+                </>}
               </View>
             ) : (
               <View style={{ gap: Spacing.two }}>

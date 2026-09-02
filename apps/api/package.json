@@ -9,9 +9,12 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.1.1",
+    "@langchain/langgraph": "^1.4.13",
+    "@modelcontextprotocol/client": "^2.0.0",
     "@miyko/contracts": "workspace:*",
     "@miyko/database": "workspace:*",
     "hono": "^4.13.5",
+    "mem0ai": "^3.1.7",
     "zod": "^3.25.76"
   },
   "devDependencies": {

@@ -1,6 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
+  bytea,
   check,
   index,
   integer,
@@ -140,6 +141,22 @@ export const providerAuthMethodEnum = pgEnum("provider_auth_method", [
   "mcp",
 ]);
 
+export const providerSyncStatusEnum = pgEnum("provider_sync_status", [
+  "pending",
+  "running",
+  "succeeded",
+  "failed",
+  "stale",
+]);
+
+export const providerSecretKindEnum = pgEnum("provider_secret_kind", [
+  "access_token",
+  "refresh_token",
+  "password",
+  "api_key",
+  "mcp_credential",
+]);
+
 export const proposalStatusEnum = pgEnum("proposal_status", [
   "draft",
   "awaiting_changes",
@@ -229,6 +246,14 @@ export const memoryScopeEnum = pgEnum("memory_scope", [
   "household",
   "member",
   "planning_run",
+]);
+
+export const memoryInitializationStatusEnum = pgEnum("memory_initialization_status", [
+  "pending",
+  "processing",
+  "completed",
+  "failed",
+  "waiting_for_provider",
 ]);
 
 export const users = pgTable(
@@ -465,8 +490,12 @@ export const shoppingProviders = pgTable(
   (table) => [
     uniqueIndex("shopping_providers_slug_uq").on(table.slug),
     uniqueIndex("shopping_providers_name_uq").on(table.name),
+    pgPolicy("providers_select_active", {
+      for: "select",
+      using: sql`${table.status} = 'active'`,
+    }),
   ],
-);
+).enableRLS();
 
 /**
  * A user's account at an external provider. Credentials are references into
@@ -522,6 +551,71 @@ export const userProviderAccounts = pgTable(
     pgPolicy("user_providers_delete_own", {
       for: "delete",
       using: sql`${table.userId} = ${currentUserId()}`,
+    }),
+  ],
+).enableRLS();
+
+/** Encrypted provider credentials; the encryption key is never stored here. */
+export const providerSecrets = pgTable(
+  "provider_secrets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userProviderAccountId: uuid("user_provider_account_id")
+      .notNull()
+      .references(() => userProviderAccounts.id, { onDelete: "cascade" }),
+    kind: providerSecretKindEnum("kind").notNull(),
+    encryptedValue: bytea("encrypted_value").notNull(),
+    keyVersion: varchar("key_version", { length: 64 }).notNull(),
+    createdAt: timestampColumn("created_at"),
+    updatedAt: timestampColumn("updated_at"),
+  },
+  (table) => [
+    uniqueIndex("provider_secrets_account_kind_uq").on(
+      table.userProviderAccountId,
+      table.kind,
+    ),
+    index("provider_secrets_account_idx").on(table.userProviderAccountId),
+    pgPolicy("provider_secrets_select_own", {
+      for: "select",
+      using: sql`EXISTS (
+        SELECT 1
+        FROM public.user_providers account
+        WHERE account.id = ${table.userProviderAccountId}
+          AND account.user_id = public.miyko_current_user_id()
+      )`,
+    }),
+    pgPolicy("provider_secrets_insert_own", {
+      for: "insert",
+      withCheck: sql`EXISTS (
+        SELECT 1
+        FROM public.user_providers account
+        WHERE account.id = ${table.userProviderAccountId}
+          AND account.user_id = public.miyko_current_user_id()
+      )`,
+    }),
+    pgPolicy("provider_secrets_update_own", {
+      for: "update",
+      using: sql`EXISTS (
+        SELECT 1
+        FROM public.user_providers account
+        WHERE account.id = ${table.userProviderAccountId}
+          AND account.user_id = public.miyko_current_user_id()
+      )`,
+      withCheck: sql`EXISTS (
+        SELECT 1
+        FROM public.user_providers account
+        WHERE account.id = ${table.userProviderAccountId}
+          AND account.user_id = public.miyko_current_user_id()
+      )`,
+    }),
+    pgPolicy("provider_secrets_delete_own", {
+      for: "delete",
+      using: sql`EXISTS (
+        SELECT 1
+        FROM public.user_providers account
+        WHERE account.id = ${table.userProviderAccountId}
+          AND account.user_id = public.miyko_current_user_id()
+      )`,
     }),
   ],
 ).enableRLS();
@@ -719,6 +813,60 @@ export const memorySyncRecords = pgTable(
       "memory_sync_records_scope_owner_check",
       sql`(${table.scope} = 'household' AND ${table.memberId} IS NULL AND ${table.planningRunId} IS NULL) OR (${table.scope} = 'member' AND ${table.memberId} IS NOT NULL AND ${table.planningRunId} IS NULL) OR (${table.scope} = 'planning_run' AND ${table.memberId} IS NULL AND ${table.planningRunId} IS NOT NULL)`,
     ),
+  ],
+).enableRLS();
+
+/** Tracks the asynchronous first-memory bootstrap independently of household onboarding. */
+export const memoryInitializations = pgTable(
+  "memory_initializations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    householdId: uuid("household_id").references(() => households.id, {
+      onDelete: "set null",
+    }),
+    memberId: uuid("member_id").references(() => householdMembers.id, {
+      onDelete: "set null",
+    }),
+    providerAccountId: uuid("provider_account_id").references(
+      () => userProviderAccounts.id,
+      { onDelete: "set null" },
+    ),
+    sourceEventId: uuid("source_event_id").references(() => outboxEvents.id, {
+      onDelete: "set null",
+    }),
+    status: memoryInitializationStatusEnum("status").notNull().default("pending"),
+    requestedAt: timestampColumn("requested_at"),
+    startedAt: optionalTimestampColumn("started_at"),
+    completedAt: optionalTimestampColumn("completed_at"),
+    lastError: text("last_error"),
+    createdAt: timestampColumn("created_at"),
+    updatedAt: timestampColumn("updated_at"),
+  },
+  (table) => [
+    uniqueIndex("memory_initializations_source_event_uq").on(table.sourceEventId),
+    index("memory_initializations_user_status_idx").on(table.userId, table.status),
+    index("memory_initializations_household_idx").on(table.householdId),
+    index("memory_initializations_provider_account_idx").on(table.providerAccountId),
+    pgPolicy("memory_initializations_select_own", {
+      for: "select",
+      using: sql`${table.userId} = ${currentUserId()}`,
+    }),
+    pgPolicy("memory_initializations_insert_own", {
+      for: "insert",
+      withCheck: sql`${table.userId} = ${currentUserId()}`,
+    }),
+    pgPolicy("memory_initializations_update_own", {
+      for: "update",
+      using: sql`${table.userId} = ${currentUserId()}`,
+      withCheck: sql`${table.userId} = ${currentUserId()}`,
+    }),
+    pgPolicy("memory_initializations_delete_own", {
+      for: "delete",
+      using: sql`${table.userId} = ${currentUserId()}`,
+    }),
   ],
 ).enableRLS();
 
@@ -939,7 +1087,11 @@ export const connectedProviderAccounts = pgTable(
       .references(() => householdMembers.id, { onDelete: "restrict" }),
     status: providerAccountStatusEnum("status").notNull().default("active"),
     revokedAt: optionalTimestampColumn("revoked_at"),
+    syncStatus: providerSyncStatusEnum("sync_status").notNull().default("pending"),
+    firstSyncedAt: optionalTimestampColumn("first_synced_at"),
     lastSyncedAt: optionalTimestampColumn("last_synced_at"),
+    staleAt: optionalTimestampColumn("stale_at"),
+    lastSyncError: text("last_sync_error"),
     createdAt: timestampColumn("created_at"),
     updatedAt: timestampColumn("updated_at"),
   },
@@ -1126,6 +1278,7 @@ export const providerSyncEvents = pgTable(
       table.providerEventId,
     ),
     index("provider_sync_events_household_status_idx").on(table.householdId, table.status),
+    index("provider_sync_events_connected_account_idx").on(table.connectedAccountId),
   ],
 ).enableRLS();
 
@@ -1171,6 +1324,9 @@ export const outboxEvents = pgTable(
     status: outboxStatusEnum("status").notNull().default("pending"),
     attempts: integer("attempts").notNull().default(0),
     availableAt: timestampColumn("available_at"),
+    claimedAt: optionalTimestampColumn("claimed_at"),
+    claimedBy: varchar("claimed_by", { length: 120 }),
+    claimExpiresAt: optionalTimestampColumn("claim_expires_at"),
     processedAt: optionalTimestampColumn("processed_at"),
     lastError: text("last_error"),
     createdAt: timestampColumn("created_at"),
@@ -1185,8 +1341,17 @@ export const outboxEvents = pgTable(
       table.version,
     ),
     index("outbox_events_pending_idx").on(table.status, table.availableAt),
+    index("outbox_events_claim_idx").on(
+      table.status,
+      table.availableAt,
+      table.claimExpiresAt,
+    ),
     index("outbox_events_household_idx").on(table.householdId, table.createdAt),
     check("outbox_events_attempts_non_negative", sql`${table.attempts} >= 0`),
+    check(
+      "outbox_events_claim_consistency",
+      sql`(${table.claimedAt} IS NULL AND ${table.claimedBy} IS NULL AND ${table.claimExpiresAt} IS NULL) OR (${table.claimedAt} IS NOT NULL AND ${table.claimedBy} IS NOT NULL AND ${table.claimExpiresAt} IS NOT NULL)`,
+    ),
   ],
 ).enableRLS();
 
@@ -1260,6 +1425,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   sessions: many(userSessions),
   memberships: many(householdMembers),
   providerAccounts: many(userProviderAccounts),
+  memoryInitializations: many(memoryInitializations),
   ownedHouseholds: many(households),
   sentInvitations: many(householdInvitations, { relationName: "inviter" }),
   receivedInvitations: many(householdInvitations, { relationName: "invitee" }),
@@ -1278,6 +1444,7 @@ export const householdsRelations = relations(households, ({ one, many }) => ({
   mealPlanItems: many(mealPlanItems),
   feedback: many(feedback),
   memorySyncRecords: many(memorySyncRecords),
+  memoryInitializations: many(memoryInitializations),
   proposals: many(shoppingProposals),
   proposalItems: many(shoppingProposalItems),
   proposalComments: many(shoppingProposalComments),
@@ -1315,6 +1482,7 @@ export const householdMembersRelations = relations(householdMembers, ({ one, man
   startedPlanningRuns: many(planningRuns),
   createdMealPlans: many(mealPlans),
   feedback: many(feedback),
+  memoryInitializations: many(memoryInitializations),
   authorizedProviderAccounts: many(connectedProviderAccounts),
   createdProposals: many(shoppingProposals),
   approvedProposals: many(shoppingProposals, { relationName: "proposalApprover" }),
@@ -1365,6 +1533,41 @@ export const userProviderAccountsRelations = relations(
       references: [shoppingProviders.id],
     }),
     householdConnections: many(connectedProviderAccounts),
+    secrets: many(providerSecrets),
+    memoryInitializations: many(memoryInitializations),
+  }),
+);
+
+export const providerSecretsRelations = relations(providerSecrets, ({ one }) => ({
+  userProviderAccount: one(userProviderAccounts, {
+    fields: [providerSecrets.userProviderAccountId],
+    references: [userProviderAccounts.id],
+  }),
+}));
+
+export const memoryInitializationsRelations = relations(
+  memoryInitializations,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [memoryInitializations.userId],
+      references: [users.id],
+    }),
+    household: one(households, {
+      fields: [memoryInitializations.householdId],
+      references: [households.id],
+    }),
+    member: one(householdMembers, {
+      fields: [memoryInitializations.memberId],
+      references: [householdMembers.id],
+    }),
+    providerAccount: one(userProviderAccounts, {
+      fields: [memoryInitializations.providerAccountId],
+      references: [userProviderAccounts.id],
+    }),
+    sourceEvent: one(outboxEvents, {
+      fields: [memoryInitializations.sourceEventId],
+      references: [outboxEvents.id],
+    }),
   }),
 );
 
@@ -1752,6 +1955,7 @@ export const outboxEventsRelations = relations(outboxEvents, ({ one, many }) => 
     fields: [outboxEvents.householdId],
     references: [households.id],
   }),
+  memoryInitializations: many(memoryInitializations),
   notificationJobs: many(notificationJobs),
 }));
 
@@ -1793,6 +1997,7 @@ export const schema = {
   householdInvitations,
   shoppingProviders,
   userProviderAccounts,
+  providerSecrets,
   providerProducts,
   productReplacements,
   foodIntents,
@@ -1801,6 +2006,7 @@ export const schema = {
   mealPlanItems,
   feedback,
   memorySyncRecords,
+  memoryInitializations,
   shoppingProposals,
   shoppingProposalItems,
   shoppingProposalComments,
@@ -1822,6 +2028,7 @@ export const schema = {
   householdInvitationsRelations,
   shoppingProvidersRelations,
   userProviderAccountsRelations,
+  providerSecretsRelations,
   providerProductsRelations,
   productReplacementsRelations,
   foodIntentsRelations,
@@ -1830,6 +2037,7 @@ export const schema = {
   mealPlanItemsRelations,
   feedbackRelations,
   memorySyncRecordsRelations,
+  memoryInitializationsRelations,
   shoppingProposalsRelations,
   shoppingProposalItemsRelations,
   shoppingProposalCommentsRelations,

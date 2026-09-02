@@ -33,8 +33,8 @@ Expo / React Native
           ↓
       Hono API
    ┌──────┼────────┬─────────────┐
-   ↓      ↓        ↓             ↓
-Postgres Mem0  LangGraph.js  Silpo MCP
+   ↓      ↓        ↓                  ↓
+Postgres Mem0  LangSmith Agent Server  Silpo MCP
    ↓
 RLS-protected household data
 ```
@@ -58,7 +58,7 @@ Docker Compose is used only for local PostgreSQL persistence; there is still no 
 
 - Mobile: Expo, React Native and TypeScript.
 - API: Hono and TypeScript.
-- Workflow: LangGraph.js with PostgreSQL checkpoints.
+- Workflow: LangGraph behind the Agent Layer interface; checkpoint storage is selected by the runtime, with no mock or fallback mode.
 - Database: PostgreSQL with mandatory Row-Level Security.
 - Long-term memory: Mem0 Cloud.
 - Shopping: official Silpo MCP through a server-side MCP client.
@@ -70,7 +70,7 @@ Docker Compose is used only for local PostgreSQL persistence; there is still no 
 
 Security is server-side and deny-by-default.
 
-- Only the health endpoint is public.
+- Only health and the unauthenticated auth bootstrap endpoints (`/auth/login`, `/auth/register`) are public.
 - All other API routes require authentication and household-level authorization.
 - A client must never choose its own `user_id`, `household_id` or role.
 - Every household-owned query is scoped by `household_id` and protected by PostgreSQL RLS.
@@ -123,4 +123,4 @@ Keep the implementation understandable and avoid building features outside the M
 
 ## Repository status
 
-This repository currently contains the product documentation and workspace configuration. Applications and shared packages are added incrementally as the implementation begins.
+This repository contains the product documentation, Expo app, Hono API, shared contracts and Drizzle database package. The system is still in active scaffold development; current gaps and deferred decisions are tracked in [docs/architecture.md](docs/architecture.md).

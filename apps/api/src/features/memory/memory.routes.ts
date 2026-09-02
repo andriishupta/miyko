@@ -4,6 +4,7 @@ import { feedbackSchema, memoryQuerySchema, memoryWriteSchema } from './memory.s
 import { memoryService } from './memory.service.js'
 
 export const memoryRoutes = new Hono()
+memoryRoutes.get('/status', async (c) => c.json({ data: await memoryService.status(c.get('requestContext')) }))
 memoryRoutes.get('/', async (c) => {
   const query = parseQuery(c, memoryQuerySchema)
   return c.json({ data: await memoryService.read(c.get('requestContext'), query.memberId, query.runId) })

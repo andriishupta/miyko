@@ -4,6 +4,5 @@ export const audioProcessSchema = z.object({
   fileName: z.string().min(1).max(120),
   mimeType: z.enum(['audio/m4a', 'audio/mpeg', 'audio/wav', 'audio/webm']),
   durationSeconds: z.number().positive().max(180),
-  audioBase64: z.string().min(1).max(8_000_000),
+  audioBase64: z.string().min(1).max(8_000_000).regex(/^[A-Za-z0-9+/]+={0,2}$/, 'Invalid base64 audio'),
 }).strict()
-

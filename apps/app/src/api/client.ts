@@ -1,5 +1,6 @@
 import type {
   ApiResponse,
+  CreateFoodIntentRequest,
   CreateProposalRequest,
   CreateHouseholdResponse,
   EditProposalItemRequest,
@@ -28,7 +29,11 @@ import type {
   ApiProviderConnectionResponse,
   ApiProvider,
   ApiProviderOrdersResponse,
-  ApiSettings,
+  ApiAudioProcessResponse,
+  ApiIntentProcessResponse,
+  ApiMemoryInitializationStatus,
+  ApiProviderSyncResponse,
+  ApiPlanningRunResponse,
 } from '@/api/types';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, '');
@@ -100,15 +105,19 @@ export const api = {
     disconnect: (providerSlug: string) => request<{ disconnected: boolean }>(`/providers/${encodeURIComponent(providerSlug)}`, { method: 'DELETE' }),
     bind: (providerSlug: string) => request<ApiProviderConnectionResponse>(`/providers/${encodeURIComponent(providerSlug)}/bind`, { method: 'POST' }),
     orders: (providerSlug: string) => request<ApiProviderOrdersResponse>(`/providers/${encodeURIComponent(providerSlug)}/orders`),
+    sync: (providerSlug: string) => request<ApiProviderSyncResponse>(`/providers/${encodeURIComponent(providerSlug)}/sync`, { method: 'POST' }),
+  },
+  intents: {
+    create: (body: CreateFoodIntentRequest) => request<ApiIntentProcessResponse>('/intents', { method: 'POST', body }),
+  },
+  planning: {
+    start: (intentId: string) => request<ApiIntentProcessResponse>('/planning', { method: 'POST', body: { intentId } }),
+    get: (planningRunId: string) => request<ApiPlanningRunResponse>(`/planning/${encodeURIComponent(planningRunId)}`),
   },
   deliveries: {
     latest: () => request<ApiDelivery | null>('/deliveries/latest'),
     all: () => request<ApiDelivery[]>('/deliveries'),
     details: (id: string) => request<ApiDeliveryDetails>(`/deliveries/${encodeURIComponent(id)}`),
-  },
-  settings: {
-    get: () => request<ApiSettings>('/settings'),
-    update: (patch: Partial<ApiSettings>) => request<ApiSettings>('/settings', { method: 'PATCH', body: patch }),
   },
   orders: {
     listOrders: () => request<ApiOrder[]>('/orders'),
@@ -129,9 +138,10 @@ export const api = {
     replacements: (id: string) => request<ApiProductReplacementsResponse>(`/products/${encodeURIComponent(id)}/replacements`),
   },
   audio: {
-    process: (body: { fileName: string; mimeType: 'audio/m4a' | 'audio/mpeg' | 'audio/wav' | 'audio/webm'; durationSeconds: number; audioBase64: string }) => request('/audio/process', { method: 'POST', body }),
+    process: (body: { fileName: string; mimeType: 'audio/m4a' | 'audio/mpeg' | 'audio/wav' | 'audio/webm'; durationSeconds: number; audioBase64: string }) => request<ApiAudioProcessResponse>('/audio/process', { method: 'POST', body }),
   },
   memory: {
+    status: () => request<ApiMemoryInitializationStatus | null>('/memory/status'),
     read: (query: { memberId?: string; runId?: string } = {}) => {
       const params = new URLSearchParams();
       if (query.memberId) params.set('memberId', query.memberId);

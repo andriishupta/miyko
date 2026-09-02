@@ -1,6 +1,6 @@
 # MiyKo mobile app
 
-This is the Expo / React Native app for MiyKo. It uses the existing Hono API and shared `@miyko/contracts` types for login, onboarding, providers, dashboard, household, deliveries, orders and settings. Relational API data is database-backed; audio, Mem0 and Silpo MCP remain scaffold adapters.
+This is the Expo / React Native app for MiyKo. It uses the existing Hono API and shared `@miyko/contracts` types for login, onboarding, providers, dashboard, household, deliveries and orders. Settings are local UI preferences for the MVP. External provider and Agent Layer behavior depends on server-side credentials and deployed integrations.
 
 ## Get started
 

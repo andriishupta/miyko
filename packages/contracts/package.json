@@ -6,6 +6,10 @@
     ".": {
       "types": "./index.ts",
       "import": "./index.ts"
+    },
+    "./schemas": {
+      "types": "./schemas.ts",
+      "import": "./schemas.ts"
     }
   },
   "scripts": {
@@ -14,5 +18,8 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "zod": "^3.25.76"
+  }
 }

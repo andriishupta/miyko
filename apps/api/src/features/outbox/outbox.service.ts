@@ -1,22 +1,139 @@
-import { and, asc, eq, lte, inArray } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, lte, or, sql } from 'drizzle-orm'
 import { outboxEvents } from '@miyko/database/schema'
+import type { JsonObject } from '@miyko/database/schema'
 import type { OutboxEvent, RequestContext } from '@miyko/contracts'
 import { db } from '../../lib/database.js'
 
-const toEvent = (row: typeof outboxEvents.$inferSelect): OutboxEvent => ({ id: row.id, householdId: row.householdId, aggregateType: row.aggregateType, aggregateId: row.aggregateId, eventType: row.eventType, version: row.version, status: row.status === 'published' ? 'published' : row.status === 'dead_letter' ? 'dead_letter' : row.status === 'retrying' ? 'retrying' : row.status === 'processing' ? 'processing' : 'pending', attempts: row.attempts, processedAt: row.processedAt?.toISOString() ?? null, lastError: row.lastError, createdAt: row.createdAt.toISOString() })
+const toEvent = (row: typeof outboxEvents.$inferSelect): OutboxEvent => ({
+  id: row.id,
+  householdId: row.householdId,
+  aggregateType: row.aggregateType,
+  aggregateId: row.aggregateId,
+  eventType: row.eventType,
+  version: row.version,
+  status: row.status === 'published' ? 'published' : row.status === 'dead_letter' ? 'dead_letter' : row.status === 'retrying' ? 'retrying' : row.status === 'processing' ? 'processing' : 'pending',
+  attempts: row.attempts,
+  processedAt: row.processedAt?.toISOString() ?? null,
+  lastError: row.lastError,
+  createdAt: row.createdAt.toISOString(),
+})
+
+export type OutboxEnqueueInput = {
+  householdId: string
+  aggregateType: string
+  aggregateId: string
+  eventType: string
+  payload: JsonObject
+  version?: number
+}
+
+export type OutboxEventRow = typeof outboxEvents.$inferSelect
 
 export class OutboxService {
-  async listPending(context: RequestContext) {
-    const rows = await db.query.outboxEvents.findMany({ where: and(eq(outboxEvents.householdId, context.household.id), inArray(outboxEvents.status, ['pending', 'retrying']), lte(outboxEvents.availableAt, new Date())), orderBy: [asc(outboxEvents.availableAt)], limit: 100 })
+  async enqueue(input: OutboxEnqueueInput) {
+    const active = await db.query.outboxEvents.findFirst({
+      where: and(
+        eq(outboxEvents.householdId, input.householdId),
+        eq(outboxEvents.aggregateType, input.aggregateType),
+        eq(outboxEvents.aggregateId, input.aggregateId),
+        eq(outboxEvents.eventType, input.eventType),
+        inArray(outboxEvents.status, ['pending', 'processing', 'retrying']),
+      ),
+      orderBy: [desc(outboxEvents.version)],
+    })
+    if (active) return active
+
+    const latest = await db.query.outboxEvents.findFirst({
+      where: and(
+        eq(outboxEvents.householdId, input.householdId),
+        eq(outboxEvents.aggregateType, input.aggregateType),
+        eq(outboxEvents.aggregateId, input.aggregateId),
+        eq(outboxEvents.eventType, input.eventType),
+      ),
+      orderBy: [desc(outboxEvents.version)],
+    })
+    const version = input.version ?? (latest ? latest.version + 1 : 1)
+    const rows = await db.insert(outboxEvents).values({
+      householdId: input.householdId,
+      aggregateType: input.aggregateType,
+      aggregateId: input.aggregateId,
+      eventType: input.eventType,
+      version,
+      payload: input.payload,
+      status: 'pending',
+      availableAt: new Date(),
+    }).onConflictDoNothing().returning()
+    return rows[0] ?? db.query.outboxEvents.findFirst({
+      where: and(
+        eq(outboxEvents.householdId, input.householdId),
+        eq(outboxEvents.aggregateType, input.aggregateType),
+        eq(outboxEvents.aggregateId, input.aggregateId),
+        eq(outboxEvents.eventType, input.eventType),
+        eq(outboxEvents.version, version),
+      ),
+    })
+  }
+
+  async listPending(context: RequestContext, limit = 100) {
+    const now = new Date()
+    const rows = await db.query.outboxEvents.findMany({
+      where: and(
+        eq(outboxEvents.householdId, context.household.id),
+        or(
+          and(inArray(outboxEvents.status, ['pending', 'retrying']), lte(outboxEvents.availableAt, now)),
+          and(eq(outboxEvents.status, 'processing'), lte(outboxEvents.claimExpiresAt, now)),
+        ),
+      ),
+      orderBy: [asc(outboxEvents.availableAt), asc(outboxEvents.createdAt)],
+      limit,
+    })
     return rows.map(toEvent)
   }
 
-  async processPending(context: RequestContext) {
-    const events = await this.listPending(context)
-    for (const event of events) {
-      await db.update(outboxEvents).set({ status: 'published', attempts: event.attempts + 1, processedAt: new Date(), updatedAt: new Date() }).where(and(eq(outboxEvents.id, event.id), eq(outboxEvents.householdId, context.household.id)))
-    }
-    return { processed: events.length, events }
+  async claim(context: RequestContext, workerId: string, limit = 25, leaseMs = 60_000) {
+    const now = new Date()
+    const leaseExpiresAt = new Date(now.getTime() + leaseMs)
+    return db.transaction(async (tx) => {
+      const rows = await tx.select().from(outboxEvents).where(and(
+        eq(outboxEvents.householdId, context.household.id),
+        or(
+          and(inArray(outboxEvents.status, ['pending', 'retrying']), lte(outboxEvents.availableAt, now)),
+          and(eq(outboxEvents.status, 'processing'), lte(outboxEvents.claimExpiresAt, now)),
+        ),
+      )).orderBy(asc(outboxEvents.availableAt), asc(outboxEvents.createdAt)).limit(limit).for('update', { skipLocked: true })
+
+      if (rows.length === 0) return []
+      return tx.update(outboxEvents).set({
+        status: 'processing',
+        attempts: sql`${outboxEvents.attempts} + 1`,
+        claimedAt: now,
+        claimedBy: workerId,
+        claimExpiresAt: leaseExpiresAt,
+        lastError: null,
+        updatedAt: now,
+      }).where(and(eq(outboxEvents.householdId, context.household.id), inArray(outboxEvents.id, rows.map((row) => row.id)))).returning()
+    })
+  }
+
+  async markPublished(eventId: string, householdId: string) {
+    const now = new Date()
+    await db.update(outboxEvents).set({ status: 'published', processedAt: now, claimedAt: null, claimedBy: null, claimExpiresAt: null, updatedAt: now }).where(and(eq(outboxEvents.id, eventId), eq(outboxEvents.householdId, householdId), eq(outboxEvents.status, 'processing')))
+  }
+
+  async markFailed(eventId: string, householdId: string, attempts: number, error: string, maxAttempts: number, backoffMs: number) {
+    const now = new Date()
+    const terminal = attempts >= maxAttempts
+    await db.update(outboxEvents).set({
+      status: terminal ? 'dead_letter' : 'retrying',
+      availableAt: terminal ? now : new Date(now.getTime() + backoffMs),
+      processedAt: terminal ? now : null,
+      lastError: error,
+      claimedAt: null,
+      claimedBy: null,
+      claimExpiresAt: null,
+      updatedAt: now,
+    }).where(and(eq(outboxEvents.id, eventId), eq(outboxEvents.householdId, householdId), eq(outboxEvents.status, 'processing')))
   }
 }
+
 export const outboxService = new OutboxService()

@@ -1,12 +1,15 @@
 # App/API gaps
 
-The app calls the Hono API through the shared `@miyko/contracts` types. Relational API resources are read from the existing Drizzle database client; external agent, audio, Mem0 and Silpo integrations remain scaffold adapters.
+The app calls the Hono API through the shared `@miyko/contracts` types. Relational API resources are read from the existing Drizzle database client; external provider and Agent Layer behavior still depends on server-side credentials and deployed integrations.
 
 ## Missing or not directly representable
 
 - Household onboarding: `POST /onboarding/households` creates the first household and owner membership without requiring an existing household context. `POST /invitations/:id/accept` is available without household context and is wired to the `Join household` flow.
 - Store providers: the app uses `GET /providers` and `GET /providers/accounts`, connects or reauthorizes through the user-level routes, and then calls the household-scoped bind route. Provider credentials remain API-side; the app only keeps them in the form state while submitting.
-- Text chat / food intent: there is no route such as `POST /intents` or `POST /chat` that accepts the message from the chat screen and returns a planning response. `POST /memory` is not an equivalent replacement because memory is not the source of truth for an intent.
-- Audio capture: `POST /audio/process` exists and the app client exposes it, but the app has no recording/file-upload flow yet. The Home audio control therefore reports this as unavailable instead of sending fabricated audio data.
-- Basket approval context: `POST /orders/proposals/:proposalId/approve` exists, but the delivery detail response does not expose a proposal ID. The app does not turn a delivery tap into a fabricated basket approval.
+- Text chat / food intent: the app calls `POST /intents` with the shared food-intent shape, but that route is not mounted in the API yet. `POST /memory` is not an equivalent replacement because memory is not the source of truth for an intent.
+- Planning: the app client exposes `POST /planning` and `GET /planning/:planningRunId` for the planned Agent Layer flow, but those routes are not mounted in the API yet.
+- Audio processing: `POST /audio/process` exists and the app now sends a real Expo recording as JSON base64. The API performs real transcription and Agent Layer processing when the required server-side configuration is present; missing configuration is returned explicitly.
+- Memory initialization: the Settings UI calls `GET /memory/status`; the API returns the latest household-scoped initialization record or `null` when none exists.
+- Provider synchronization: the provider UI calls `POST /providers/:providerSlug/sync`; the API queues a sync only when the provider state is stale and returns the current sync status.
+- Basket approval: proposal review and owner approval now call the existing proposal routes. Delivery details expose a proposal ID when one is linked; otherwise the UI reports that no proposal was returned. Approval still depends on an active provider binding, and provider basket synchronization can return the API's explicit connection or integration error.
 Product, household, delivery and order identifiers are now UUIDs from the database and the app consumes their shared contract shapes directly.

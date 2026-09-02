@@ -130,8 +130,12 @@ export class OrdersService {
       const connection = await storeProviderService.updateBasket(context, provider.slug, { proposalId: proposal.id, items: approved.items.map((item) => ({ productId: item.productId, quantity: item.quantity })) })
       await db.update(shoppingProposals).set({ status: 'applied', updatedAt: new Date() }).where(eq(shoppingProposals.id, proposal.id))
       {
-        const orderRows = await db.insert(orders).values({ householdId: context.household.id, providerId: connection.provider.id, connectedAccountId: connection.connectedAccountId, proposalId: proposal.id, providerBasketId: connection.basket.basketId, status: 'in_cart', totalAmount: String(approved.items.reduce((sum, item) => sum + (item.estimatedTotalPrice ?? 0), 0)), currency: 'UAH', syncStatus: 'succeeded', lastProviderSyncAt: new Date() }).returning()
-        await db.insert(orderItems).values(approved.items.map((item) => ({ householdId: context.household.id, orderId: orderRows[0].id, productId: item.productId, providerProductIdSnapshot: item.productId, productNameSnapshot: item.productName, quantity: String(item.quantity), unit: item.unit, unitPriceSnapshot: item.estimatedUnitPrice === null ? null : String(item.estimatedUnitPrice), totalPriceSnapshot: item.estimatedTotalPrice === null ? null : String(item.estimatedTotalPrice), currency: 'UAH', status: 'added' })))
+        await db.transaction(async (tx) => {
+          const orderRows = await tx.insert(orders).values({ householdId: context.household.id, providerId: connection.provider.id, connectedAccountId: connection.connectedAccountId, proposalId: proposal.id, providerBasketId: connection.basket.basketId, status: 'in_cart', totalAmount: String(approved.items.reduce((sum, item) => sum + (item.estimatedTotalPrice ?? 0), 0)), currency: 'UAH', syncStatus: 'succeeded', lastProviderSyncAt: new Date() }).returning()
+          const order = orderRows[0]
+          await tx.insert(orderItems).values(approved.items.map((item) => ({ householdId: context.household.id, orderId: order.id, productId: item.productId, providerProductIdSnapshot: item.productId, productNameSnapshot: item.productName, quantity: String(item.quantity), unit: item.unit, unitPriceSnapshot: item.estimatedUnitPrice === null ? null : String(item.estimatedUnitPrice), totalPriceSnapshot: item.estimatedTotalPrice === null ? null : String(item.estimatedTotalPrice), currency: 'UAH', status: 'added' })))
+          await tx.insert(outboxEvents).values({ householdId: context.household.id, aggregateType: 'order', aggregateId: order.id, eventType: 'delivery.sync_requested', version: 1, payload: { orderId: order.id, providerSlug: provider.slug } })
+        })
       }
     } catch (error) {
       await db.update(shoppingProposals).set({ status: 'failed', updatedAt: new Date() }).where(eq(shoppingProposals.id, proposal.id))

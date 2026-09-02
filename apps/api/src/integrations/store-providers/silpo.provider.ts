@@ -1,13 +1,13 @@
 import type { BasketUpdateResponse, ProviderAuthRequest, ProviderOrder } from '@miyko/contracts'
 import { mcpService } from '../mcp/mcp.service.js'
-import type { StoreProvider, ProviderTokenSet, ProviderRequestContext, BasketUpdateContext } from './store-provider.types.js'
+import type { StoreProvider, ProviderTokenSet, ProviderRequestContext, BasketUpdateContext, StoreProviderOrderRecord } from './store-provider.types.js'
 
 const definition = {
   name: 'Silpo',
   slug: 'silpo',
   kind: 'store' as const,
   status: 'active' as const,
-  capabilities: ['authenticate', 'reauthorize', 'orders', 'products', 'basket'],
+  capabilities: ['products.search', 'products.replacements', 'receipts.read', 'orders.history', 'basket.update', 'deliveries.read'],
 }
 
 const toTokenSet = (result: Awaited<ReturnType<typeof mcpService.authenticate>>): ProviderTokenSet => ({
@@ -23,6 +23,7 @@ const toTokenSet = (result: Awaited<ReturnType<typeof mcpService.authenticate>>)
 export const createSilpoProvider = (): StoreProvider => ({
   name: definition.name,
   get: () => ({ ...definition }),
+  discoverTools: () => mcpService.discoverTools(),
 
   async authenticate(input: ProviderAuthRequest) {
     return toTokenSet(await mcpService.authenticate(input))
@@ -32,9 +33,17 @@ export const createSilpoProvider = (): StoreProvider => ({
     return toTokenSet(await mcpService.reauthorize(input))
   },
 
+  async getOrderRecords(context: ProviderRequestContext): Promise<StoreProviderOrderRecord[]> {
+    const orders = await mcpService.getOrderHistory(context)
+    return orders.map((order) => ({
+      order: { id: order.externalOrderId, status: order.status, total: order.total, currency: order.currency, placedAt: order.placedAt },
+      items: order.items,
+      delivery: order.delivery,
+    }))
+  },
+
   async getOrders(context: ProviderRequestContext): Promise<ProviderOrder[]> {
-    const deliveries = await mcpService.getOrderHistory(context)
-    return deliveries.map((delivery) => ({ id: delivery.id, status: delivery.status, total: delivery.total, currency: delivery.currency, placedAt: delivery.scheduledFor }))
+    return (await this.getOrderRecords(context)).map((record) => record.order)
   },
 
   async updateBasket(context: BasketUpdateContext): Promise<BasketUpdateResponse> {

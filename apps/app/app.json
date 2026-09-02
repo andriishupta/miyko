@@ -26,6 +26,12 @@
     "plugins": [
       "expo-router",
       [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow MiyKo to record audio."
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#F1842A",

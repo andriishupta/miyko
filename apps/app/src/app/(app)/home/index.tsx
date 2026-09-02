@@ -1,16 +1,18 @@
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FAB } from 'react-native-paper';
+import { ActivityIndicator } from 'react-native-paper';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { api, ApiError } from '@/api/client';
 import type { ApiDashboard, ApiDelivery } from '@/api/types';
 import { useAuth } from '@/auth/auth-context';
-import { AppIcon, EmptyState, IconButton, MiykoText, PrimaryButton, ScreenScroll, SectionTitle, StatusPill, Surface } from '@/components/miyko-ui';
+import { AppIcon, EmptyState, IconButton, MiykoText, PrimaryButton, ScreenScroll, SectionTitle, SecondaryButton, StatusPill, Surface } from '@/components/miyko-ui';
+import { AudioRecorderCard } from '@/components/audio-recorder-card';
 import { Radius, Spacing } from '@/constants/theme';
 import { formatMoney, formatSchedule } from '@/api/presenters';
 import { useTheme } from '@/hooks/use-theme';
+import { useProviderStatus } from '@/providers/provider-status-context';
 
 function dateKey(offset: number) {
   const date = new Date();
@@ -36,7 +38,6 @@ export default function HomeScreen() {
   const [deliveriesLoading, setDeliveriesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deliveriesError, setDeliveriesError] = useState<string | null>(null);
-  const [audioState, setAudioState] = useState<'idle' | 'unavailable'>('idle');
   const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
@@ -87,10 +88,14 @@ export default function HomeScreen() {
         <Surface style={styles.summaryCard}>
           <View style={styles.summaryHeader}><View style={{ flex: 1, gap: 3 }}><MiykoText variant="caption" color="textSecondary">NEXT FOOD PLAN</MiykoText><MiykoText variant="section">{dashboard.planning.title ?? 'No active meal plan'}</MiykoText></View><StatusPill label={pendingApprovals ? `${pendingApprovals} review` : dashboard.planning.status} tone={pendingApprovals ? 'warning' : 'accent'} /></View>
           <MiykoText variant="body" color="textSecondary">{dashboard.householdSummary.memberCount} household members · {dashboard.householdSummary.connectedShoppingAccounts} shopping account{dashboard.householdSummary.connectedShoppingAccounts === 1 ? '' : 's'} connected.</MiykoText>
+          {dashboard.planning.proposalId && <SecondaryButton label="Review proposal" icon="cart" onPress={() => router.push(`/home/proposals/${dashboard.planning.proposalId}`)} />}
           {latest && <View style={styles.summaryFooter}><View style={styles.meta}><AppIcon name="cart" size={16} color={theme.textSecondary} /><MiykoText variant="caption" color="textSecondary">Latest {formatMoney(latest.total, latest.currency)}</MiykoText></View><Pressable onPress={() => router.push(`/home/delivery/${latest.id}`)} hitSlop={8}><MiykoText variant="label" color="accent">View delivery →</MiykoText></Pressable></View>}
         </Surface>
 
-        <View style={styles.audioBlock}><MiykoText variant="caption" color="textSecondary">HAVE AN IDEA?</MiykoText><FAB accessibilityLabel="Audio input is not connected" icon={() => <AppIcon name="mic" size={30} color={theme.accentContrast} />} color={theme.accentContrast} customSize={84} mode="elevated" style={[styles.audioButton, { backgroundColor: theme.accent }]} onPress={() => setAudioState('unavailable')} /><MiykoText variant="section">Record an audio idea</MiykoText><MiykoText variant="caption" color="textSecondary" style={styles.centerText}>{audioState === 'unavailable' ? 'Audio capture is not wired in the app yet.' : 'The API endpoint is ready for an audio file upload.'}</MiykoText><Pressable onPress={() => router.push('/home/chat')} hitSlop={8} style={({ pressed }) => pressed && styles.pressed}><View style={styles.chatLink}><MiykoText variant="label" color="accent">Or open chat</MiykoText><AppIcon name="message" size={14} color={theme.accent} /></View></Pressable></View>
+        <ProviderStateCard />
+
+        <AudioRecorderCard />
+        <Pressable onPress={() => router.push('/home/chat')} hitSlop={8} style={({ pressed }) => pressed && styles.pressed}><View style={styles.chatLink}><MiykoText variant="label" color="accent">Or open chat</MiykoText><AppIcon name="message" size={14} color={theme.accent} /></View></Pressable>
 
         <View style={styles.sectionGap}><SectionTitle title="This week" /><View style={styles.daysRow}>{plannerDays.map((day) => { const isSelected = day.date === selectedDate; return <Pressable key={day.date} onPress={() => setSelectedDate(day.date)} style={({ pressed }) => [styles.dayButton, { backgroundColor: isSelected ? theme.accent : theme.backgroundElement, borderColor: isSelected ? theme.accent : theme.border }, pressed && styles.pressed]}><MiykoText variant="caption" color={isSelected ? 'accentContrast' : 'textSecondary'}>{day.label}</MiykoText><MiykoText variant="label" color={isSelected ? 'accentContrast' : 'text'}>{day.date.slice(8)}</MiykoText></Pressable>; })}</View></View>
 
@@ -100,6 +105,18 @@ export default function HomeScreen() {
       </ScreenScroll>
     </>
   );
+}
+
+function ProviderStateCard() {
+  const router = useRouter();
+  const theme = useTheme();
+  const { accounts, connected, loading, error, refresh } = useProviderStatus();
+  const connectedNames = accounts.filter((account) => account.status === 'active').map((account) => account.provider.name).join(' · ');
+
+  if (loading) return <Surface><ActivityIndicator color={theme.accent} /></Surface>;
+  if (error) return <Surface><MiykoText variant="section">Provider status unavailable</MiykoText><MiykoText variant="body" color="textSecondary">{error}</MiykoText><PrimaryButton label="Retry" onPress={() => void refresh()} /></Surface>;
+  if (connected) return <Surface><View style={styles.providerHeader}><MiykoText variant="section">Provider connected</MiykoText><StatusPill label="Ready" tone="success" /></View><MiykoText variant="body" color="textSecondary">{connectedNames}. Provider-dependent sync can be used when available.</MiykoText><SecondaryButton label="Manage providers" icon="cart" onPress={() => router.push('/home/providers')} /></Surface>;
+  return <Surface><View style={styles.providerHeader}><MiykoText variant="section">No provider connected</MiykoText><StatusPill label="Optional" tone="neutral" /></View><MiykoText variant="body" color="textSecondary">Planning and household collaboration remain available. Receipt import and shopping sync need a provider connection.</MiykoText><SecondaryButton label="Connect a provider" icon="cart" onPress={() => router.push('/home/providers')} /></Surface>;
 }
 
 function MealCard({ event }: { event: ApiDashboard['upcomingEvents'][number] }) {
@@ -120,10 +137,8 @@ const styles = StyleSheet.create({
   summaryCard: { gap: Spacing.three },
   summaryHeader: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.two },
   summaryFooter: { paddingTop: Spacing.two, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  providerHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  audioBlock: { alignItems: 'center', gap: Spacing.two, paddingVertical: Spacing.three },
-  audioButton: { width: 84, height: 84, borderRadius: Radius.pill, alignItems: 'center', justifyContent: 'center' },
-  centerText: { textAlign: 'center' },
   chatLink: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   sectionGap: { gap: Spacing.two },
   sectionHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },

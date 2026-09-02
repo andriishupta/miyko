@@ -1,21 +1,42 @@
-import { AppError } from '../../lib/errors.js'
-import { logger } from '../../lib/logger.js'
-import { mcpConfig } from './mcp.config.js'
-import { mockMcpClient } from './mcp.mock.js'
-import type { McpClient, ProviderAuthResult, ProviderLoginInput } from './mcp.client.js'
 import { z } from 'zod'
+import { AppError } from '../../lib/errors.js'
+import { mcpConfig } from './mcp.config.js'
+import { sdkMcpClient } from './mcp.sdk.client.js'
+import type { McpClient, McpOrderRecord, ProductSearchInput, ProviderLoginInput } from './mcp.client.js'
 
 const productSchema = z.object({
-  id: z.string(), name: z.string(), brand: z.string(), category: z.string(), price: z.number().nonnegative(), currency: z.literal('UAH'), unit: z.string(), available: z.boolean(), imageUrl: z.string().nullable(),
+  id: z.string().min(1), name: z.string().min(1), brand: z.string().nullable(), category: z.string().min(1), price: z.number().nonnegative(), currency: z.literal('UAH'), unit: z.string().min(1), available: z.boolean(), imageUrl: z.string().url().nullable(),
 }).strict()
-const basketResultSchema = z.object({ basketId: z.string(), updated: z.boolean() }).strict()
-const deliverySchema = z.object({ id: z.string(), householdId: z.string(), status: z.enum(['planned', 'delivered', 'cancelled']), scheduledFor: z.string(), address: z.string(), total: z.number().nonnegative(), currency: z.literal('UAH'), products: z.array(z.object({ productId: z.string(), quantity: z.number().int().positive(), price: z.number().nonnegative() }).strict()), linkedEventId: z.string().nullable() }).strict()
-const basketSchema = z.object({ householdId: z.string(), items: z.array(z.object({ productId: z.string(), quantity: z.number().int().positive() }).strict()) }).strict()
-const productSearchInputSchema = z.object({ query: z.string().max(100), category: z.string().max(60).optional(), limit: z.number().int().min(1).max(50) }).strict()
-const basketUpdateInputSchema = z.object({ householdId: z.string().min(1), proposalId: z.string().min(1), items: z.array(z.object({ productId: z.string().min(1), quantity: z.number().int().min(1).max(50) }).strict()).max(50) }).strict()
+
+const providerAuthResultSchema = z.object({
+  providerSubject: z.string().nullable(), accountLogin: z.string().nullable(), accessToken: z.string().min(1), refreshToken: z.string().nullable(), accessTokenExpiresAt: z.string().datetime().nullable(), refreshTokenExpiresAt: z.string().datetime().nullable(), scopes: z.array(z.string().min(1)),
+}).strict()
+
+const orderItemSchema = z.object({
+  providerProductId: z.string().min(1), name: z.string().min(1), quantity: z.number().positive(), unit: z.string().min(1), unitPrice: z.number().nonnegative().nullable(), totalPrice: z.number().nonnegative().nullable(),
+}).strict()
+
+const orderRecordSchema = z.object({
+  externalOrderId: z.string().min(1), status: z.string().min(1), total: z.number().nonnegative(), currency: z.literal('UAH'), placedAt: z.string().datetime().nullable(), items: z.array(orderItemSchema), delivery: z.object({ externalDeliveryId: z.string().min(1), status: z.enum(['pending', 'scheduled', 'in_transit', 'delivered', 'cancelled', 'failed']), scheduledFrom: z.string().datetime().nullable(), scheduledTo: z.string().datetime().nullable() }).strict().nullable(),
+}).strict()
+
+const basketSchema = z.object({ householdId: z.string().min(1), items: z.array(z.object({ productId: z.string().min(1), quantity: z.number().int().positive() }).strict()) }).strict()
+const basketResultSchema = z.object({ basketId: z.string().min(1), updated: z.boolean() }).strict()
+const productSearchInputSchema = z.object({ query: z.string().max(100), category: z.string().max(60).optional(), limit: z.number().int().min(1).max(50), accessToken: z.string().min(1) }).strict()
+const basketUpdateInputSchema = z.object({ householdId: z.string().min(1), proposalId: z.string().min(1), items: z.array(z.object({ productId: z.string().min(1), quantity: z.number().int().min(1).max(50) }).strict()).max(50), accessToken: z.string().min(1) }).strict()
 const providerLoginInputSchema = z.object({ login: z.string().min(1).max(320), password: z.string().min(1).max(200) }).strict()
 const providerReauthorizeInputSchema = z.object({ refreshToken: z.string().min(1) }).strict()
-const providerAuthResultSchema = z.object({ providerSubject: z.string().nullable(), accountLogin: z.string().nullable(), accessToken: z.string().min(1), refreshToken: z.string().nullable(), accessTokenExpiresAt: z.string().datetime().nullable(), refreshTokenExpiresAt: z.string().datetime().nullable(), scopes: z.array(z.string()) }).strict()
+
+const parseExternal = <T>(schema: z.ZodType<T>, value: unknown): T => {
+  const parsed = schema.safeParse(value)
+  if (!parsed.success) throw new AppError('MCP_INVALID_RESPONSE', 'MCP returned an invalid response', 502)
+  return parsed.data
+}
+
+const collectionSchema = <T extends z.ZodTypeAny>(item: T) => z.union([
+  z.array(item),
+  z.object({ items: z.array(item) }).strict().transform((value) => value.items),
+])
 
 const withTimeout = async <T>(operation: string, work: () => Promise<T>) => {
   let timeout: ReturnType<typeof setTimeout> | undefined
@@ -24,48 +45,67 @@ const withTimeout = async <T>(operation: string, work: () => Promise<T>) => {
   })
   try {
     return await Promise.race([work(), timeoutPromise])
+  } catch (error) {
+    if (error instanceof AppError) throw error
+    throw new AppError('MCP_REQUEST_FAILED', 'MCP request failed', 502)
   } finally {
     if (timeout) clearTimeout(timeout)
   }
 }
 
-const retryOnce = async <T>(operation: string, work: () => Promise<T>) => {
-  try { return await withTimeout(operation, work) } catch (error) {
-    logger.warn('mcp.operation.retry', { operation, error: error instanceof Error ? error.message : 'unknown' })
-    return withTimeout(operation, work)
+const readWithRetry = async <T>(operation: string, work: () => Promise<T>) => {
+  try {
+    return await withTimeout(operation, work)
+  } catch (firstError) {
+    if (firstError instanceof AppError && ['MCP_TIMEOUT', 'MCP_REQUEST_FAILED'].includes(firstError.code)) return withTimeout(operation, work)
+    throw firstError
   }
 }
 
 export class McpService {
-  constructor(private readonly client: McpClient = mcpConfig.mode === 'mock' ? mockMcpClient : unavailableRealClient()) {}
+  constructor(private readonly client: McpClient = sdkMcpClient) {}
 
-  async discoverTools() { return retryOnce('tools/list', () => this.client.discoverTools()) }
-  async authenticate(input: ProviderLoginInput): Promise<ProviderAuthResult> { const checkedInput = providerLoginInputSchema.parse(input); return providerAuthResultSchema.parse(await retryOnce('provider/authenticate', () => this.client.authenticate(checkedInput))) }
-  async reauthorize(input: { refreshToken: string }): Promise<ProviderAuthResult> { const checkedInput = providerReauthorizeInputSchema.parse(input); return providerAuthResultSchema.parse(await retryOnce('provider/reauthorize', () => this.client.reauthorize(checkedInput))) }
-  async searchProducts(input: Parameters<McpClient['searchProducts']>[0]) { const checkedInput = productSearchInputSchema.parse(input); return (await retryOnce('products/search', () => this.client.searchProducts(checkedInput))).map((product) => productSchema.parse(product)) }
-  async getProduct(productId: string) { const product = await retryOnce('products/details', () => this.client.getProduct(productId)); return product ? productSchema.parse(product) : null }
-  async getReplacements(productId: string) { return (await retryOnce('products/replacements', () => this.client.getReplacements(productId))).map((product) => productSchema.parse(product)) }
-  async getOrderHistory(input: { householdId: string; accessToken: string }) { return (await retryOnce('orders/history', () => this.client.getOrderHistory(input))).map((delivery) => deliverySchema.parse(delivery)) }
-  async getBasket(householdId: string) { return basketSchema.parse(await retryOnce('basket/read', () => this.client.getBasket(householdId))) }
+  async discoverTools() {
+    return parseExternal(z.array(z.string().min(1)), await readWithRetry('tools/list', () => this.client.discoverTools()))
+  }
+
+  async authenticate(input: ProviderLoginInput) {
+    const checkedInput = parseExternal(providerLoginInputSchema, input)
+    return parseExternal(providerAuthResultSchema, await withTimeout('provider/authenticate', () => this.client.authenticate(checkedInput)))
+  }
+
+  async reauthorize(input: { refreshToken: string }) {
+    const checkedInput = parseExternal(providerReauthorizeInputSchema, input)
+    return parseExternal(providerAuthResultSchema, await withTimeout('provider/reauthorize', () => this.client.reauthorize(checkedInput)))
+  }
+
+  async searchProducts(input: ProductSearchInput) {
+    const checkedInput = parseExternal(productSearchInputSchema, input)
+    return parseExternal(collectionSchema(productSchema), await readWithRetry('products/search', () => this.client.searchProducts(checkedInput)))
+  }
+
+  async getProduct(input: { productId: string; accessToken: string }) {
+    const product = await readWithRetry('products/details', () => this.client.getProduct(input))
+    return parseExternal(productSchema.nullable(), product)
+  }
+
+  async getReplacements(input: { productId: string; accessToken: string }) {
+    return parseExternal(collectionSchema(productSchema), await readWithRetry('products/replacements', () => this.client.getReplacements(input)))
+  }
+
+  async getOrderHistory(input: { householdId: string; accessToken: string }): Promise<McpOrderRecord[]> {
+    return parseExternal(collectionSchema(orderRecordSchema), await readWithRetry('orders/history', () => this.client.getOrderHistory(input)))
+  }
+
+  async getBasket(input: { householdId: string; accessToken: string }) {
+    return parseExternal(basketSchema, await readWithRetry('basket/read', () => this.client.getBasket(input)))
+  }
 
   async updateBasket(input: Parameters<McpClient['updateBasket']>[0], ownerApproved: boolean) {
     if (!ownerApproved) throw new AppError('OWNER_APPROVAL_REQUIRED', 'Owner approval required', 403)
-    const checkedInput = basketUpdateInputSchema.parse(input)
-    logger.info('mcp.basket_update.mock', { householdId: input.householdId, proposalId: input.proposalId })
-    return basketResultSchema.parse(await retryOnce('basket/update', () => this.client.updateBasket(checkedInput)))
+    const checkedInput = parseExternal(basketUpdateInputSchema, input)
+    return parseExternal(basketResultSchema, await withTimeout('basket/update', () => this.client.updateBasket(checkedInput)))
   }
 }
-
-const unavailableRealClient = (): McpClient => ({
-  async discoverTools() { throw new AppError('MCP_REAL_DISABLED', 'Real MCP client is not enabled in the mock scaffold', 503) },
-  async authenticate() { throw new AppError('MCP_REAL_DISABLED', 'Real MCP client is not enabled in the mock scaffold', 503) },
-  async reauthorize() { throw new AppError('MCP_REAL_DISABLED', 'Real MCP client is not enabled in the mock scaffold', 503) },
-  async searchProducts() { throw new AppError('MCP_REAL_DISABLED', 'Real MCP client is not enabled in the mock scaffold', 503) },
-  async getProduct() { throw new AppError('MCP_REAL_DISABLED', 'Real MCP client is not enabled in the mock scaffold', 503) },
-  async getReplacements() { throw new AppError('MCP_REAL_DISABLED', 'Real MCP client is not enabled in the mock scaffold', 503) },
-  async getOrderHistory() { throw new AppError('MCP_REAL_DISABLED', 'Real MCP client is not enabled in the mock scaffold', 503) },
-  async getBasket() { throw new AppError('MCP_REAL_DISABLED', 'Real MCP client is not enabled in the mock scaffold', 503) },
-  async updateBasket() { throw new AppError('MCP_REAL_DISABLED', 'Real MCP client is not enabled in the mock scaffold', 503) },
-})
 
 export const mcpService = new McpService()

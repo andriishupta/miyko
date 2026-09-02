@@ -338,8 +338,8 @@ Hono API — TypeScript
         ┌────────┼───────────────┐
         ↓        ↓               ↓
    PostgreSQL  Mem0 Platform  Silpo MCP
-        ↓
- LangGraph checkpoints
+                 ↑
+      LangSmith Agent Server
 
 LangSmith Studio
         ↑
@@ -351,7 +351,7 @@ LangSmith Studio
 - **Mobile:** Expo, React Native, TypeScript.
 - **Backend:** Hono, TypeScript.
 - **Workflow:** LangGraph.js.
-- **Workflow persistence:** LangGraph PostgreSQL checkpointer.
+- **Workflow persistence:** LangSmith Deployment / Agent Server managed checkpoints.
 - **Long-term memory:** Mem0 Hobby plan.
 - **Database:** PostgreSQL.
 - **MCP:** official Model Context Protocol TypeScript client.
@@ -409,7 +409,7 @@ For the hackathon demo, time can be accelerated so that a two-day follow-up appe
 - member item request;
 - owner approve/decline;
 - real Silpo basket update;
-- LangGraph checkpoint and resume;
+- LangGraph checkpoint and resume through LangSmith Deployment;
 - simulated follow-up notification;
 - LangSmith workflow trace.
 

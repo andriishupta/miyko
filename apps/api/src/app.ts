@@ -13,7 +13,6 @@ import { productsRoutes } from './features/products/products.routes.js'
 import { householdsRoutes, invitationAcceptanceRoutes, onboardingRoutes } from './features/households/households.routes.js'
 import { ordersRoutes } from './features/orders/orders.routes.js'
 import { deliveriesRoutes } from './features/deliveries/deliveries.routes.js'
-import { settingsRoutes } from './features/settings/settings.routes.js'
 import { audioRoutes } from './features/audio/audio.routes.js'
 import { memoryRoutes } from './features/memory/memory.routes.js'
 import { householdProviderRoutes, providersRoutes } from './features/providers/providers.routes.js'
@@ -26,7 +25,6 @@ protectedApi.route('/products', productsRoutes)
 protectedApi.route('/household', householdsRoutes)
 protectedApi.route('/orders', ordersRoutes)
 protectedApi.route('/deliveries', deliveriesRoutes)
-protectedApi.route('/settings', settingsRoutes)
 protectedApi.route('/audio', audioRoutes)
 protectedApi.route('/memory', memoryRoutes)
 protectedApi.route('/providers', householdProviderRoutes)

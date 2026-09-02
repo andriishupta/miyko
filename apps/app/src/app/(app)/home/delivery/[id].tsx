@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, ApiError } from '@/api/client';
 import type { ApiDeliveryDetails } from '@/api/types';
 import { presentDelivery } from '@/api/presenters';
-import { AppIcon, EmptyState, MiykoText, ScreenScroll, SecondaryButton, StatusPill, Surface } from '@/components/miyko-ui';
+import { AppIcon, EmptyState, MiykoText, PrimaryButton, ScreenScroll, SecondaryButton, StatusPill, Surface } from '@/components/miyko-ui';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -42,6 +42,7 @@ export default function DeliveryDetailsScreen() {
 
   const view = presentDelivery(delivery.delivery, delivery.order, productNames);
   const tone = delivery.delivery.status === 'scheduled' ? 'warning' : delivery.delivery.status === 'delivered' ? 'success' : 'neutral';
+  const proposalId = delivery.order?.proposalId;
   return (
     <>
       <Stack.Screen options={{ title: view.title }} />
@@ -49,7 +50,7 @@ export default function DeliveryDetailsScreen() {
         <Surface style={styles.heroCard}><View style={[styles.deliveryBadge, { backgroundColor: theme.accentSoft }]}><AppIcon name="cart" size={26} color={theme.accent} /></View><MiykoText variant="title">{view.title}</MiykoText><StatusPill label={view.status} tone={tone} /><MiykoText variant="body" color="textSecondary">{view.date} · {view.eta}</MiykoText>{delivery.delivery.addressReference && <MiykoText variant="caption" color="textSecondary">{delivery.delivery.addressReference}</MiykoText>}</Surface>
         <View style={styles.sectionGap}><View style={styles.sectionHeader}><MiykoText variant="section">Products</MiykoText><MiykoText variant="caption" color="textSecondary">{view.products.length} items</MiykoText></View>{view.products.map((product) => <Surface key={product.id} style={styles.productRow}><View style={[styles.check, { backgroundColor: theme.accentSoft }]}><MiykoText variant="label" color="accent">✓</MiykoText></View><View style={{ flex: 1, gap: 2 }}><MiykoText variant="body">{product.name}</MiykoText><MiykoText variant="caption" color="textSecondary">{product.detail} · {product.quantity}</MiykoText></View><MiykoText variant="label">{product.price}</MiykoText></Surface>)}</View>
         <Surface style={styles.totalCard}><MiykoText variant="body" color="textSecondary">Total</MiykoText><MiykoText variant="title">{view.total}</MiykoText></Surface>
-        {delivery.delivery.status === 'pending' && <Surface><MiykoText variant="section">Approval required</MiykoText><MiykoText variant="body" color="textSecondary">This delivery is pending. The API exposes proposal approval separately; this screen does not pretend to approve a basket without its proposal.</MiykoText></Surface>}
+        {delivery.delivery.status === 'pending' && <Surface><MiykoText variant="section">Approval required</MiykoText><MiykoText variant="body" color="textSecondary">Review the proposal before any provider basket action is attempted.</MiykoText>{proposalId ? <PrimaryButton label="Review proposal" icon="cart" onPress={() => router.push(`/home/proposals/${proposalId}`)} /> : <MiykoText variant="caption" color="textSecondary">The API did not return a proposal for this delivery.</MiykoText>}</Surface>}
         <SecondaryButton label="Back to deliveries" onPress={() => router.back()} />
       </ScreenScroll>
     </>

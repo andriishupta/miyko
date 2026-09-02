@@ -12,6 +12,16 @@ export type CurrencyCode = "UAH";
 export type AccountStatus = "active" | "suspended" | "deactivated";
 export type ProviderKind = "store" | "delivery";
 export type ProviderStatus = "active" | "inactive";
+export type ProviderCapability =
+  | "products.search"
+  | "products.replacements"
+  | "receipts.read"
+  | "orders.history"
+  | "basket.update"
+  | "deliveries.read"
+  | "deliveries.create"
+  | "deliveries.track"
+  | (string & {});
 export type ProviderAuthMethod = "oauth" | "password" | "api_key" | "mcp";
 export type ProviderAccountStatus =
   | "active"
@@ -91,6 +101,18 @@ export type DeliveryStatus =
   | "cancelled"
   | "failed";
 export type SyncStatus = "pending" | "running" | "succeeded" | "failed";
+export type ProviderSyncStatus =
+  | "pending"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "stale";
+export type MemoryInitializationStatus =
+  | "pending"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "waiting_for_provider";
 export type NotificationStatus =
   | "pending"
   | "processing"
@@ -122,7 +144,7 @@ export type Provider = {
   slug: string;
   kind: ProviderKind;
   status: ProviderStatus;
-  capabilities: string[];
+  capabilities: ProviderCapability[];
 };
 
 /** Public view of a connected provider account; secret references stay API-side. */
@@ -164,6 +186,22 @@ export type ProviderOrder = {
 export type ProviderOrdersResponse = {
   provider: Provider;
   items: ProviderOrder[];
+};
+
+export type ProviderSyncStatusResponse = {
+  connectedAccountId: UUID;
+  providerId: UUID;
+  status: ProviderSyncStatus;
+  firstSyncedAt: ISODateString | null;
+  lastSyncedAt: ISODateString | null;
+  staleAt: ISODateString | null;
+  lastError: string | null;
+};
+
+export type ProviderSyncResponse = ProviderSyncStatusResponse & {
+  provider: Provider;
+  requested: boolean;
+  eventId: UUID | null;
 };
 
 export type LoginRequest = {
@@ -424,6 +462,19 @@ export type MemoryReference = {
   lastSyncedAt: ISODateString | null;
 };
 
+export type MemoryInitializationStatusResponse = {
+  id: UUID;
+  userId: UUID;
+  householdId: UUID | null;
+  memberId: UUID | null;
+  providerAccountId: UUID | null;
+  status: MemoryInitializationStatus;
+  requestedAt: ISODateString;
+  startedAt: ISODateString | null;
+  completedAt: ISODateString | null;
+  lastError: string | null;
+};
+
 export type NotificationJob = {
   id: UUID;
   householdId: UUID;
@@ -447,11 +498,62 @@ export type OutboxEvent = {
   aggregateId: UUID;
   eventType: string;
   version: number;
+  payload?: OutboxEventPayload;
   status: OutboxStatus;
   attempts: number;
   processedAt: ISODateString | null;
   lastError: string | null;
   createdAt: ISODateString;
+};
+
+export type OutboxEventPayload =
+  | { proposalId: UUID }
+  | { proposalId: UUID; approvedByMemberId: UUID }
+  | { feedbackId: UUID }
+  | { memberId: UUID }
+  | { providerId: UUID; connectedAccountId: UUID; providerSlug?: string }
+  | { orderId: UUID; providerSlug?: string };
+
+export type AudioTranscription = {
+  text: string;
+  language: string | null;
+  durationMs: number | null;
+};
+
+export type AgentResponse = {
+  message: string;
+  intentId: UUID | null;
+  planningRunId: UUID | null;
+  proposalId: UUID | null;
+};
+
+export type AudioAgentResponse = {
+  transcription: AudioTranscription;
+  agent: AgentResponse;
+};
+
+export type AudioProcessResponse = {
+  requestId: string;
+  status: "processed";
+  transcript: string;
+  intent: {
+    type: "meal_planning" | "shopping" | "feedback" | "other";
+    summary: string;
+    confidence: number;
+  } | null;
+  response: { type: string; message: string };
+  foodIntentId: UUID | null;
+  planningRunId: UUID;
+  audioStored: boolean;
+};
+
+export type PlanningRunResponse = {
+  run: PlanningRun;
+};
+
+export type ProposalWorkflowResponse = {
+  proposal: ShoppingProposal;
+  availableActions: Array<"edit" | "approve" | "decline" | "comment">;
 };
 
 export type LoginResponse = AuthSession;
@@ -545,3 +647,24 @@ export type ApiError = {
 };
 
 export type ApiResponse<T> = { data: T } | { error: ApiError };
+
+export {
+  agentResponseSchema,
+  audioAgentResponseSchema,
+  audioProcessResponseSchema,
+  audioTranscriptionSchema,
+  memoryInitializationStatusResponseSchema,
+  outboxEventPayloadSchema,
+  planningRunResponseSchema,
+  providerAccountsResponseSchema,
+  providerAuthRequestSchema,
+  providerCapabilitySchema,
+  providerConnectionResponseSchema,
+  providerOrderSchema,
+  providerOrdersResponseSchema,
+  providerSchema,
+  providerSyncResponseSchema,
+  providerSyncStatusResponseSchema,
+  proposalWorkflowResponseSchema,
+  userProviderAccountSchema,
+} from "./schemas.js";

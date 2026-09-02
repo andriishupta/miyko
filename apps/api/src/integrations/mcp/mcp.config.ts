@@ -1,9 +1,17 @@
-export type McpMode = 'mock' | 'real'
-
 export const mcpConfig = {
-  mode: (process.env.MCP_MODE ?? 'mock') as McpMode,
-  serverUrl: process.env.SILPO_MCP_URL ?? null,
-  transport: process.env.SILPO_MCP_TRANSPORT ?? 'stdio',
+  serverUrl: process.env.SILPO_MCP_URL,
+  command: process.env.SILPO_MCP_COMMAND,
+  args: process.env.SILPO_MCP_ARGS?.split(/\s+/).filter(Boolean) ?? [],
+  envKeys: process.env.SILPO_MCP_ENV_KEYS?.split(',').map((item) => item.trim()).filter(Boolean) ?? [],
+  toolNames: {
+    authenticate: process.env.SILPO_MCP_AUTHENTICATE_TOOL,
+    reauthorize: process.env.SILPO_MCP_REAUTHORIZE_TOOL,
+    searchProducts: process.env.SILPO_MCP_SEARCH_PRODUCTS_TOOL,
+    getProduct: process.env.SILPO_MCP_GET_PRODUCT_TOOL,
+    getReplacements: process.env.SILPO_MCP_GET_REPLACEMENTS_TOOL,
+    getOrderHistory: process.env.SILPO_MCP_ORDER_HISTORY_TOOL,
+    getBasket: process.env.SILPO_MCP_GET_BASKET_TOOL,
+    updateBasket: process.env.SILPO_MCP_UPDATE_BASKET_TOOL,
+  },
   requestTimeoutMs: Number(process.env.MCP_TIMEOUT_MS ?? 8_000),
 }
-
