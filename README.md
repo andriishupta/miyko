@@ -50,6 +50,8 @@ packages/
   config/       Shared project configuration
 ```
 
+Detailed desired and current application flows are documented in [docs/architecture.md](docs/architecture.md).
+
 Docker Compose is used only for local PostgreSQL persistence; there is still no separate agent/worker application during the prototype. The API can contain the workflow runner and scheduler until scale or deployment needs justify splitting them.
 
 ## Technology direction
