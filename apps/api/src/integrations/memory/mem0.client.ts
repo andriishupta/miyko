@@ -21,12 +21,6 @@ const client = (): Mem0Api => {
   return new MemoryClient({ apiKey }) as unknown as Mem0Api
 }
 
-export const memoryNamespace = {
-  member: (memberId: string) => `member:${memberId}`,
-  household: (householdId: string) => `household:${householdId}`,
-  planningRun: (runId: string) => `run:${runId}`,
-}
-
 export const mem0Client: MemoryProvider = {
   async add(namespace: string, content: string, metadata: Record<string, string>) {
     const result = await client().add([{ role: 'user', content }], { userId: namespace, metadata: { ...metadata, namespace } })
@@ -44,8 +38,7 @@ export const mem0Client: MemoryProvider = {
     throw new AppError('MEM0_INVALID_RESPONSE', 'Mem0 returned an invalid response', 502)
   },
 
-  async update(namespace: string, memoryId: string, content: string) {
-    void namespace
+  async update(memoryId: string, content: string) {
     const result = await client().update(memoryId, content)
     if (!result || typeof result !== 'object') throw new AppError('MEM0_INVALID_RESPONSE', 'Mem0 returned an invalid response', 502)
   },

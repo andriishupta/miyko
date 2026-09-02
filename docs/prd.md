@@ -189,42 +189,35 @@ A new planning workflow begins using updated long-term memory.
 
 ## 7. Agent Workflow
 
-LangGraph.js manages each active meal or shopping session.
+The Agent Layer runs in LangGraph Cloud. Planning may finish in one run, while the order workflow checkpoints in the managed platform, pauses for provider or household decisions and resumes until basket and delivery choices are complete. It does not bypass owner approval.
 
 ```text
-START
+food request
   ↓
-classify_request
+classify request
   ↓
-load_household_context
+load member memory and local history
   ↓
-retrieve_mem0_memory
+plan meals and portions
   ↓
-read_silpo_history_if_needed
+search provider products when connected
   ↓
-plan_meal_and_portions
+save local meal plan and optional proposal
   ↓
-search_silpo_products
+create durable order workflow
   ↓
-build_basket_proposal
+provider response / replacement / pickup / delivery choice
   ↓
-collect_household_changes
+pause → household decision → resume by thread_id
   ↓
-wait_for_owner_approval
-  ├── reject → revise_proposal
-  ├── edit   → revise_proposal
-  └── approve
-         ↓
-update_silpo_cart
-         ↓
-write_mem0_feedback
-         ↓
-schedule_follow_up
-         ↓
-END
+owner approval
+  ↓
+update provider basket → save local order/delivery
+  ↓
+feedback event → memory update
 ```
 
-Each planning session receives its own LangGraph `thread_id`. LangGraph checkpoints allow the workflow to pause for minutes or days and resume after another household member responds.
+LangGraph Cloud assigns each proposal workflow its thread and run IDs and preserves workflow state between requests and restarts; LangSmith Cloud traces the run. PostgreSQL stores those external IDs, the provider name and last status observed when an action runs, alongside the approved business decision and final order. It does not store graph checkpoints. Basket application happens from the approval outbox event, so provider failures use the existing retry policy instead of extending the HTTP request. Background workflow-status synchronization is deferred.
 
 ## 8. Memory Design
 
@@ -269,9 +262,9 @@ PostgreSQL remains the source of truth for:
 - invitations;
 - connected Silpo accounts;
 - encrypted OAuth credentials;
-- active planning-session metadata;
+- planning-run metadata;
 - approval status;
-- notification jobs.
+- provider synchronization and outbox events.
 
 Mem0 must never be used as the source of truth for permissions, authentication or purchase authorization.
 
@@ -331,67 +324,42 @@ Hono API — TypeScript
         ├── authentication
         ├── household management
         ├── invitations and roles
-        ├── LangGraph.js runner
-        ├── notification scheduler
-        └── Silpo OAuth handling
+        ├── sequential Agent Layer
+        ├── provider adapters
+        └── outbox worker
                  ↓
         ┌────────┼───────────────┐
         ↓        ↓               ↓
    PostgreSQL  Mem0 Platform  Silpo MCP
-                 ↑
-      LangSmith Agent Server
-
-LangSmith Studio
-        ↑
- workflow tracing and debugging
 ```
 
 ### Technology stack
 
 - **Mobile:** Expo, React Native, TypeScript.
 - **Backend:** Hono, TypeScript.
-- **Workflow:** LangGraph.js.
-- **Workflow persistence:** LangSmith Deployment / Agent Server managed checkpoints.
+- **Agent Layer:** sequential model calls behind an API interface.
 - **Long-term memory:** Mem0 Hobby plan.
 - **Database:** PostgreSQL.
 - **MCP:** official Model Context Protocol TypeScript client.
 - **Validation:** Zod.
 - **Notifications:** Expo Notifications.
-- **Observability:** LangSmith Developer plan and Studio.
 - **LLM:** tool-calling model selected during implementation.
-
-### Free-tier assumptions
-
-Mem0 Hobby:
-
-- unlimited end users;
-- 10,000 memory-add requests per month;
-- 1,000 retrieval requests per month;
-- one project.
-
-LangSmith Developer:
-
-- one developer seat;
-- up to 5,000 base traces per month;
-- access to development and debugging tools.
 
 Requests should be batched where possible. Receipt ingestion should not create a separate memory request for every individual product.
 
 ## 12. Notifications and Scheduling
 
-After a completed purchase, the backend stores:
+Follow-up notifications are deferred from the core MVP. If enabled later, the backend can store:
 
 ```text
 purchase_completed_at
 estimated_duration_days
 next_check_at
 notification_status
-langgraph_thread_id
+planning_run_id
 ```
 
-A scheduled job triggers the next agent workflow at `next_check_at`.
-
-For the hackathon demo, time can be accelerated so that a two-day follow-up appears within several seconds.
+A scheduled job may trigger the next planning request at `next_check_at`; it is not part of the current critical path.
 
 ## 13. MVP Scope
 
@@ -409,9 +377,6 @@ For the hackathon demo, time can be accelerated so that a two-day follow-up appe
 - member item request;
 - owner approve/decline;
 - real Silpo basket update;
-- LangGraph checkpoint and resume through LangSmith Deployment;
-- simulated follow-up notification;
-- LangSmith workflow trace.
 
 ### Should have
 
@@ -440,10 +405,8 @@ For the hackathon demo, time can be accelerated so that a two-day follow-up appe
 
 - Complete one end-to-end workflow during the demo.
 - Show at least one real Silpo MCP tool call.
-- Pause and resume a LangGraph workflow after owner approval.
 - Retrieve at least one relevant preference from Mem0.
 - Add approved products to the real Silpo basket.
-- Demonstrate a proactive follow-up notification.
 
 ### Product metrics
 

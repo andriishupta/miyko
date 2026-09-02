@@ -1,9 +1,9 @@
 import { notFound } from '../../lib/errors.js'
-import { createSilpoProvider } from './silpo.provider.js'
+import { silpoProvider } from './silpo.provider.js'
 import type { StoreProvider } from './store-provider.types.js'
 
 const providers = new Map<string, StoreProvider>([
-  ['silpo', createSilpoProvider()],
+  ['silpo', silpoProvider],
 ])
 
 export const storeProviderRegistry = {

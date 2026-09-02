@@ -52,7 +52,7 @@ export class MemoryService {
     const existing = await db.query.memorySyncRecords.findFirst({ where: and(eq(memorySyncRecords.householdId, context.household.id), eq(memorySyncRecords.namespace, namespace)) })
     const metadata = { source: input.source, confirmed: String(input.confirmed ?? false) }
     const externalMemoryId = existing?.externalMemoryId
-      ? (await mem0Client.update(namespace, existing.externalMemoryId, input.text), existing.externalMemoryId)
+      ? (await mem0Client.update(existing.externalMemoryId, input.text), existing.externalMemoryId)
       : await mem0Client.add(namespace, input.text, metadata)
     const row = await db.insert(memorySyncRecords).values({ householdId: context.household.id, memberId: scope === 'member' ? input.memberId : null, planningRunId: scope === 'planning_run' ? input.runId : null, scope, namespace, externalMemoryId, metadata }).onConflictDoUpdate({ target: memorySyncRecords.namespace, set: { externalMemoryId, metadata, lastSyncedAt: new Date(), updatedAt: new Date() } }).returning()
     return toMemoryReference(row[0])

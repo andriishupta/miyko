@@ -28,8 +28,8 @@ Hono API
   ├── security middleware
   ├── authentication and authorization
   ├── feature routes and services
-  ├── Agent Layer / LangGraph runner
-  ├── outbox and notification scheduling
+  ├── sequential Agent Layer
+  ├── outbox worker
   └── server-side integrations
        ├── Drizzle → PostgreSQL + RLS
        ├── Mem0 adapter
@@ -63,7 +63,7 @@ The database uses one generic `providers` catalog for stores and delivery servic
 
 Orders keep the shopping provider, while deliveries can independently point to a delivery provider. A user or household can remain in a no-provider state; provider-dependent capabilities must be unavailable explicitly until a connection exists.
 
-The API now uses a shared `StoreProvider` port with `get`, `discoverTools`, `authenticate`, `reauthorize`, `getOrders`, `getOrderRecords` and `updateBasket` operations. `storeProviderRegistry` resolves adapters by provider slug; Silpo is implemented as a factory-backed adapter that delegates to the MCP service. `StoreProviderService` owns provider catalog lookup, user-account persistence, household binding, token refresh and capability checks, so order approval does not call Silpo or MCP directly.
+The API now uses a shared `StoreProvider` port with `discoverTools`, `authenticate`, `reauthorize`, `getOrderRecords`, `searchProducts` and `updateBasket` operations. The provider catalog in PostgreSQL is the source of truth for provider metadata and capabilities. `storeProviderRegistry` resolves adapters by provider slug; Silpo is a thin adapter that delegates to the MCP service. `StoreProviderService` owns provider catalog lookup, user-account persistence, household binding, token refresh and capability checks, so order approval does not call Silpo or MCP directly.
 
 The API exposes user-level `GET /providers`, `GET /providers/accounts`, `GET /providers/:providerSlug/tools`, `POST /providers/:providerSlug/connect`, `POST /providers/:providerSlug/reauthorize` and `DELETE /providers/:providerSlug`. Household operations use the active RLS-scoped binding through `POST /providers/:providerSlug/bind`, `POST /providers/:providerSlug/sync`, `GET /providers/:providerSlug/sync-status` and `GET /providers/:providerSlug/orders`. Provider capabilities use operation names such as `products.search`, `receipts.read`, `orders.history` and `basket.update`. Provider credentials are accepted only by the API and stored as encrypted ciphertext in PostgreSQL provider secret rows; plaintext never enters contracts, mobile responses or logs.
 
@@ -87,23 +87,21 @@ The intended onboarding sequence is:
 MiyKo login → Create household | Join household → Store provider sign-in/connect (Silpo first) → application
 ```
 
-Provider connection is the second onboarding step because household membership is required before household-scoped provider binding. It supports a deliberate `Skip for now` state: planning and household collaboration may work without a provider, while receipt import, initial memory enrichment and delivery/basket features remain unavailable or pending until a provider is connected. Provider OAuth tokens stay on the API server and are never returned to Expo.
+Provider connection is the second onboarding step because household membership is required before household-scoped provider binding. It supports a deliberate `Skip for now` state: planning and household collaboration may work without a provider, while receipt import, initial memory enrichment and delivery/basket features remain unavailable until a provider is connected. Provider OAuth tokens stay on the API server and are never returned to Expo.
 
 ### Initial user memory
 
-Every newly created household member must trigger an asynchronous memory initialization flow. Household creation and invitation acceptance write a `user.memory_initialization_requested` outbox event; it must not synchronously call Silpo MCP or block login.
+Memory initialization starts only after a member binds an authorized store account to the household. Household creation and invitation acceptance stay local and do not call an external provider or create work that cannot run yet.
 
-The API worker consumes this event and, once the user has an authorized store provider connection, requests the latest 100 receipts through that provider. For the first integration, this means reading receipts through Silpo MCP. The worker validates and normalizes the provider response, extracts stable food preferences, restrictions, recurring purchases and other useful signals, and writes a summarized long-term memory to Mem0.
+The provider binding emits one `user.memory_initialization_requested` outbox event. The API worker consumes it, requests up to 100 receipts through the provider, validates and normalizes the response, extracts stable food preferences and writes one summarized member memory to Mem0.
 
-Memory initialization must be idempotent and scoped to the authorized user and household. Raw receipts, credentials and tokens must not be stored in Mem0 or logs. If the user has no connected provider account yet, the initialization record is marked `waiting_for_provider`; provider connection requeues it after onboarding and never bypasses the `Create household` / `Join household` requirement.
+Memory initialization is idempotent and scoped to the authorized user and household. Raw receipts, credentials and tokens are not stored in Mem0 or logs. If onboarding skips the provider, no initialization event is created; binding the provider later starts the flow.
 
 The app may expose initialization status as a non-blocking screen or indicator. It must not present generated preferences as confirmed facts until they are available and, where needed, confirmed by the user.
 
 ### Agent state and long-term memory
 
-LangGraph checkpoints and Mem0 memory serve different purposes. A checkpoint is short-term graph state attached to one `thread_id`, allowing a run to resume from a saved step. Mem0 stores durable, searchable preferences across threads. `planning_runs` remains MiyKo's product-level audit/status record; it is not a replacement for either store.
-
-The Agent Layer exposes function-based interfaces for memory and workflow execution. The current LangGraph implementation uses `MemorySaver` as its selected checkpoint implementation; this is a real implementation, not a mock or fallback. LangSmith Deployment/Agent Server can host the same Agent Layer boundary and provide managed persistence and task execution when that runtime is selected. MiyKo does not create checkpoint tables or implement its own start/stop/resume storage, and a self-managed Postgres checkpointer is out of scope.
+Mem0 Cloud stores durable, searchable preferences. LangGraph Cloud runs both planning and long-running order workflows; LangSmith Cloud traces them. PostgreSQL stores only business facts and external workflow references: provider, real LangGraph thread ID, latest run ID and the status observed during the latest action. It never stores graph payloads or checkpoints. Proposal outbox events start or resume the referenced thread, while provider operations remain behind `StoreProvider` and inherit outbox retries. Provider responses, replacements, pickup/delivery options and time changes can pause and resume without application-owned durable state. Basket mutation still requires the owner approval transition. Background status synchronization is intentionally deferred.
 
 ### Main application area
 
@@ -151,7 +149,7 @@ Collect feedback and update memory
 Schedule a follow-up suggestion
 ```
 
-The workflow should pause at approval and resume from a durable LangGraph checkpoint. It must never infer approval from a client-side status or from a previous proposal version.
+Approval is a trusted API state transition that resumes the managed order workflow. The server re-checks the active household membership, owner role, proposal revision and provider binding before changing a real basket.
 
 ## Desired API flow
 
@@ -216,7 +214,7 @@ These must carry an explicit tenant scope and use RLS:
 - proposals and proposal decisions;
 - connected provider accounts;
 - orders, order items and deliveries;
-- feedback and notification jobs;
+- feedback;
 - memory synchronization metadata;
 - outbox and audit records.
 
@@ -237,7 +235,7 @@ Every memory read or write is scoped by the authorized household. Memory updates
 1. A business transaction writes its relational change.
 2. The same transaction writes an `outbox_events` row.
 3. A worker claims pending events with retry/idempotency protection.
-4. Consumers update memory, notifications, synchronization state or workflow state.
+4. Consumers update memory or synchronization state; notifications and workflow state remain deferred.
 5. The event is marked published or moved to a controlled dead-letter state.
 
 Outbox payloads must be minimal, tenant-scoped and free of secrets. A provider failure must not erase the local proposal or order history.
@@ -281,7 +279,7 @@ The current codebase is a scaffold with several real boundaries already wired:
 - `packages/database/src/client.ts` creates the server-side Drizzle client from `DATABASE_URL`.
 - The API creates its server-only Drizzle client during module loading, so a valid database URL is required. Provider credentials are encrypted ciphertext and the encryption key is supplied only by the server environment.
 - `api_role` is created once by the local PostgreSQL init script; migrations only grant runtime access and install controlled helpers.
-- The demo seed covers users, memberships, the provider catalog, products, plans, proposals, orders and deliveries. It intentionally does not seed fake provider credentials; a provider connection is created through the API provider connect endpoint. Household creation and invitation acceptance emit initial memory events.
+- The demo seed covers users, memberships, the provider catalog, products, plans, proposals, orders and deliveries. It intentionally does not seed fake provider credentials; a provider connection is created through the API provider connect endpoint. Provider binding emits the initial memory event.
 
 ## Current gaps and decisions to resolve
 
@@ -296,22 +294,21 @@ The current codebase is a scaffold with several real boundaries already wired:
 - [x] Define the generic provider catalog, user provider connections and household account bindings in the database schema.
 - [x] Keep the core API provider-agnostic and introduce the shared provider port plus adapters before adding a second store integration.
 - [x] Replace the legacy provider secret store with encrypted durable server-side secret storage.
-- [x] Add the first real Agent Layer workflow with LangGraph thread/run identifiers.
-- [x] Emit `user.memory_initialization_requested` for household creation/new membership and process it through the API outbox worker.
+- [x] Add the first sequential Agent Layer workflow with correlation identifiers.
+- [x] Emit `user.memory_initialization_requested` after provider binding and process it through the API outbox worker.
 - [x] Implement the latest-100-receipts provider read, normalization, analysis and idempotent Mem0 long-term memory write.
-- [x] Add a non-blocking memory initialization state and define retry behavior when provider access is not ready.
+- [x] Keep provider-optional onboarding explicit; initialization starts when provider access is ready.
 - [x] Connect memory post-processing through outbox events and a Mem0 adapter.
 - [x] Discover the real Silpo MCP tools through `tools/list` before provider-specific calls.
 - [x] Connect native audio recording in the app to the protected audio API route.
 - [x] Add the missing proposal/order UI needed to demonstrate owner review and approval from the mobile app.
 - [x] Mount the text-intent and planning routes used by the app and connect them to the Agent Layer workflow.
-- [ ] Connect the Agent Layer boundary to LangSmith Deployment/Agent Server if managed persistence and task execution are selected for deployment.
 - [ ] Add notifications and accelerated follow-up scheduling for the demo.
 
 ## Recommended implementation order
 
 1. Apply the existing database migrations and configure the API-only environment.
 2. Discover the deployed Silpo MCP tool names and set the API tool mapping variables.
-3. Keep LangGraph behind the Agent Layer interface; use LangSmith Deployment/Agent Server when managed persistence and task execution are selected, while keeping product `planning_runs` as the business audit record and adding no checkpoint tables to MiyKo PostgreSQL.
+3. Keep the sequential Agent Layer behind its interface; add a durable workflow runtime only when a real pause/resume or scaling requirement appears.
 4. Add notification scheduling when it becomes part of the MVP flow.
 5. Finish owner-run manual verification of tenancy, provider reconnect and basket approval boundaries.

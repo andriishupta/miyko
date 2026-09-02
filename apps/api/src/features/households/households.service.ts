@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { and, eq, gt, or } from 'drizzle-orm'
-import { householdInvitations, householdMembers, households, outboxEvents, users } from '@miyko/database/schema'
+import { householdInvitations, householdMembers, households, users } from '@miyko/database/schema'
 import type { AuthUser, CreateHouseholdResponse, HouseholdInvitation, HouseholdSummary, InviteMemberRequest, RequestContext } from '@miyko/contracts'
 import { db } from '../../lib/database.js'
 import { forbidden, notFound } from '../../lib/errors.js'
@@ -20,7 +20,6 @@ export class HouseholdsService {
       const householdRows = await tx.insert(households).values({ name, ownerId: user.id }).returning()
       const household = householdRows[0]
       const memberRows = await tx.insert(householdMembers).values({ householdId: household.id, userId: user.id, role: 'owner', status: 'active' }).returning()
-      await tx.insert(outboxEvents).values({ householdId: household.id, aggregateType: 'member', aggregateId: memberRows[0].id, eventType: 'user.memory_initialization_requested', version: 1, payload: { memberId: memberRows[0].id } })
       return { household, member: memberRows[0] }
     })
     await storeProviderService.bindToHousehold(user.id, household.id, member.id)
@@ -59,22 +58,18 @@ export class HouseholdsService {
     })
     if (!invitation) throw notFound('Invitation')
     let memberId: string
-    let newMember = false
     const result = await db.transaction(async (tx) => {
       const existing = await tx.query.householdMembers.findFirst({ where: and(eq(householdMembers.householdId, invitation.householdId), eq(householdMembers.userId, user.id)) })
       if (!existing) {
         const rows = await tx.insert(householdMembers).values({ householdId: invitation.householdId, userId: user.id, role: invitation.role === 'owner' ? 'viewer' : invitation.role, status: 'active' }).returning()
         memberId = rows[0].id
-        newMember = true
       } else if (existing.status === 'removed') {
         memberId = existing.id
-        newMember = true
         await tx.update(householdMembers).set({ role: invitation.role === 'owner' ? 'viewer' : invitation.role, status: 'active', joinedAt: new Date(), removedAt: null, updatedAt: new Date() }).where(eq(householdMembers.id, existing.id))
       } else {
         memberId = existing.id
       }
       await tx.update(householdInvitations).set({ inviteeUserId: user.id, inviteeEmail: null, status: 'accepted', acceptedAt: new Date(), updatedAt: new Date() }).where(eq(householdInvitations.id, invitation.id))
-      if (newMember) await tx.insert(outboxEvents).values({ householdId: invitation.householdId, aggregateType: 'member', aggregateId: memberId, eventType: 'user.memory_initialization_requested', version: 1, payload: { memberId } })
       return toInvitation({ ...invitation, inviteeUserId: user.id, inviteeEmail: null, status: 'accepted', acceptedAt: new Date() })
     })
     await storeProviderService.bindToHousehold(user.id, invitation.householdId, memberId)

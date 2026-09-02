@@ -47,6 +47,24 @@ export function ProviderManagement({ allowBind = false, onComplete, onSkip }: Pr
 
   const accountsByProvider = useMemo(() => new Map(accounts.map((account) => [account.provider.slug, account])), [accounts]);
 
+  async function runProviderAction(provider: ApiProvider, action: () => Promise<void>, fallback: string, success?: string) {
+    if (activeSlug) return false;
+    setActiveSlug(provider.slug);
+    setError(null);
+    setMessage(null);
+    try {
+      await action();
+      await providerStatus?.refresh();
+      if (success) setMessage(success);
+      return true;
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : fallback);
+      return false;
+    } finally {
+      setActiveSlug(null);
+    }
+  }
+
   async function connectProvider(provider: ApiProvider) {
     const account = accountsByProvider.get(provider.slug);
     if (!login.trim() || !password || activeSlug) {
@@ -54,10 +72,7 @@ export function ProviderManagement({ allowBind = false, onComplete, onSkip }: Pr
       return;
     }
 
-    setActiveSlug(provider.slug);
-    setError(null);
-    setMessage(null);
-    try {
+    const completed = await runProviderAction(provider, async () => {
       if (account && account.status !== 'active') {
         await api.providers.reauthorize(provider.slug, { login: login.trim(), password });
       } else {
@@ -67,63 +82,29 @@ export function ProviderManagement({ allowBind = false, onComplete, onSkip }: Pr
       setLogin('');
       setPassword('');
       await load();
-      await providerStatus?.refresh();
-      onComplete?.();
-    } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : `Could not connect ${provider.name}.`);
-    } finally {
-      setActiveSlug(null);
-    }
+    }, `Could not connect ${provider.name}.`);
+    if (completed) onComplete?.();
   }
 
   async function bindProvider(provider: ApiProvider) {
-    if (activeSlug) return;
-    setActiveSlug(provider.slug);
-    setError(null);
-    setMessage(null);
-    try {
+    const completed = await runProviderAction(provider, async () => {
       await api.providers.bind(provider.slug);
-      await providerStatus?.refresh();
-      setMessage(`${provider.name} is connected to this household.`);
-      onComplete?.();
-    } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : `Could not connect ${provider.name} to this household.`);
-    } finally {
-      setActiveSlug(null);
-    }
+    }, `Could not connect ${provider.name} to this household.`, `${provider.name} is connected to this household.`);
+    if (completed) onComplete?.();
   }
 
   async function syncProvider(provider: ApiProvider) {
-    if (activeSlug) return;
-    setActiveSlug(provider.slug);
-    setError(null);
-    setMessage(null);
-    try {
+    await runProviderAction(provider, async () => {
       const response = await api.providers.sync(provider.slug);
-      await providerStatus?.refresh();
       setMessage(`${response.provider.name} sync requested.`);
-    } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : `Could not sync ${provider.name}.`);
-    } finally {
-      setActiveSlug(null);
-    }
+    }, `Could not sync ${provider.name}.`);
   }
 
   async function disconnectProvider(provider: ApiProvider) {
-    if (activeSlug) return;
-    setActiveSlug(provider.slug);
-    setError(null);
-    setMessage(null);
-    try {
+    await runProviderAction(provider, async () => {
       await api.providers.disconnect(provider.slug);
       await load();
-      await providerStatus?.refresh();
-      setMessage(`${provider.name} has been disconnected.`);
-    } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : `Could not disconnect ${provider.name}.`);
-    } finally {
-      setActiveSlug(null);
-    }
+    }, `Could not disconnect ${provider.name}.`, `${provider.name} has been disconnected.`);
   }
 
   return (

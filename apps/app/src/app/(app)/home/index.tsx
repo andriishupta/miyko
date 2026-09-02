@@ -10,7 +10,7 @@ import { useAuth } from '@/auth/auth-context';
 import { AppIcon, EmptyState, IconButton, MiykoText, PrimaryButton, ScreenScroll, SectionTitle, SecondaryButton, StatusPill, Surface } from '@/components/miyko-ui';
 import { AudioRecorderCard } from '@/components/audio-recorder-card';
 import { Radius, Spacing } from '@/constants/theme';
-import { formatMoney, formatSchedule } from '@/api/presenters';
+import { formatDeliveryStatus, formatMoney, formatSchedule } from '@/api/presenters';
 import { useTheme } from '@/hooks/use-theme';
 import { useProviderStatus } from '@/providers/provider-status-context';
 
@@ -126,8 +126,7 @@ function MealCard({ event }: { event: ApiDashboard['upcomingEvents'][number] }) 
 
 function DeliverySummaryCard({ delivery, onPress }: { delivery: ApiDelivery; onPress: () => void }) {
   const theme = useTheme();
-  const status = delivery.status === 'scheduled' ? 'Scheduled' : delivery.status === 'delivered' ? 'Delivered' : delivery.status === 'cancelled' ? 'Cancelled' : 'Pending';
-  return <Pressable onPress={onPress} style={({ pressed }) => pressed && styles.pressed}><Surface style={styles.deliveryCard}><View style={[styles.deliveryIcon, { backgroundColor: theme.accentSoft }]}><AppIcon name="cart" size={20} color={theme.accent} /></View><View style={{ flex: 1, gap: 3 }}><MiykoText variant="section">Grocery delivery</MiykoText><MiykoText variant="caption" color="textSecondary">{delivery.scheduledFrom ? formatSchedule(delivery.scheduledFrom) : 'Schedule unavailable'}</MiykoText><StatusPill label={status} tone={delivery.status === 'scheduled' ? 'warning' : delivery.status === 'delivered' ? 'success' : 'neutral'} /></View><View style={styles.right}><AppIcon name="chevron" size={18} color={theme.textSecondary} /></View></Surface></Pressable>;
+  return <Pressable onPress={onPress} style={({ pressed }) => pressed && styles.pressed}><Surface style={styles.deliveryCard}><View style={[styles.deliveryIcon, { backgroundColor: theme.accentSoft }]}><AppIcon name="cart" size={20} color={theme.accent} /></View><View style={{ flex: 1, gap: 3 }}><MiykoText variant="section">Grocery delivery</MiykoText><MiykoText variant="caption" color="textSecondary">{delivery.scheduledFrom ? formatSchedule(delivery.scheduledFrom) : 'Schedule unavailable'}</MiykoText><StatusPill label={formatDeliveryStatus(delivery.status)} tone={delivery.status === 'scheduled' ? 'warning' : delivery.status === 'delivered' ? 'success' : 'neutral'} /></View><View style={styles.right}><AppIcon name="chevron" size={18} color={theme.textSecondary} /></View></Surface></Pressable>;
 }
 
 const styles = StyleSheet.create({

@@ -4,7 +4,7 @@ import { secureHeaders } from 'hono/secure-headers'
 import type { Hono } from 'hono'
 import { config } from '../lib/config.js'
 
-export const applySecurityMiddleware = <T extends Hono<any>>(app: T) => {
+export const applySecurityMiddleware = <T extends Hono>(app: T) => {
   app.use('*', secureHeaders())
   app.use('*', cors({
     origin: (origin) => config.allowedOrigins.includes(origin) ? origin : undefined,
@@ -15,4 +15,3 @@ export const applySecurityMiddleware = <T extends Hono<any>>(app: T) => {
   app.use('*', bodyLimit({ maxSize: 10 * 1024 * 1024 }))
   return app
 }
-

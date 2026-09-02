@@ -1,6 +1,6 @@
 # MiyKo
 
-MiyKo is a mobile household food agent with memory and a shopping autopilot. It turns a short food intention into a shared meal plan and a proposed Silpo basket, remembers what the household likes and buys, and uses feedback to improve the next shopping cycle.
+MiyKo is a mobile household food assistant with memory. It turns a short food intention into a shared meal plan and, when a store provider is connected, a shopping proposal.
 
 The core loop is:
 
@@ -16,55 +16,54 @@ MiyKo never creates or changes a real shopping basket without explicit owner app
 The prototype focuses on:
 
 - individual and shared household spaces;
-- owner, admin, editor and viewer roles with per-member decision capability;
+- owner, admin, editor and viewer roles;
 - food intentions and meal planning;
 - household preferences, restrictions and purchase history;
 - Mem0 long-term memory;
 - real Silpo MCP product search and basket updates;
 - approval of proposed items;
-- feedback and simulated follow-up notifications.
+- feedback and future follow-up notifications.
 
 It does not include payment processing, automatic ordering, other retailers, medical advice, exact pantry tracking or detailed calorie analytics.
 
-## Architecture
+## High-level architecture
 
 ```text
-Expo / React Native
+Expo app (untrusted UI)
           ↓
-      Hono API
-   ┌──────┼────────┬─────────────┐
-   ↓      ↓        ↓                  ↓
-Postgres Mem0  LangSmith Agent Server  Silpo MCP
-   ↓
-RLS-protected household data
+Hono API (auth, permissions, business state)
+   ┌──────┼──────────┬─────────────┐
+   ↓      ↓          ↓             ↓
+Postgres Mem0  LangGraph Cloud  StoreProvider → Silpo MCP
+   ↑
+RLS + outbox
 ```
 
-The initial implementation should remain simple:
+There is one API application. It contains the business services, a LangGraph Cloud client and an in-process outbox worker. LangGraph Cloud runs and checkpoints workflows; the API stores only business facts and workflow correlation IDs. LangSmith Cloud provides tracing. The provider abstraction stays because it keeps Silpo-specific MCP details outside the core domain.
 
 ```text
 apps/
-  mobile/       Expo / React Native client
-  api/          Hono API, authentication, agent and scheduler
+  app/          Expo / React Native client
+  api/          Hono API, authentication, agent and outbox worker
 packages/
   contracts/    Shared Zod schemas and API types
-  config/       Shared project configuration
+  database/     Drizzle schema, migrations and RLS
 ```
 
 Detailed desired and current application flows are documented in [docs/architecture.md](docs/architecture.md).
 
-Docker Compose is used only for local PostgreSQL persistence; there is still no separate agent/worker application during the prototype. The API can contain the workflow runner and scheduler until scale or deployment needs justify splitting them.
+Docker Compose is used only for local PostgreSQL business data. There is no local agent checkpoint store or separate workflow runner.
 
-## Technology direction
+## Technology
 
 - Mobile: Expo, React Native and TypeScript.
 - API: Hono and TypeScript.
-- Workflow: LangGraph behind the Agent Layer interface; checkpoint storage is selected by the runtime, with no mock or fallback mode.
+- Agent Layer: LangChain/LangGraph orchestration with LangGraph Cloud state and LangSmith Cloud tracing.
 - Database: PostgreSQL with mandatory Row-Level Security.
 - Long-term memory: Mem0 Cloud.
 - Shopping: official Silpo MCP through a server-side MCP client.
 - Validation: Zod.
-- Notifications: Expo Notifications with server-side scheduling.
-- Observability: LangSmith during workflow development.
+- Notifications: deferred until the core loop is stable.
 
 ## Security model
 
@@ -106,21 +105,26 @@ pnpm --filter api seed:demo
 
 The API uses `DATABASE_URL` with the non-owner `api_role`; Drizzle and the demo seed use the admin-only `MIGRATION_DATABASE_URL`. PostgreSQL data is kept in the `miyko_postgres_data` volume.
 
-## Development approach
+## Main flow
 
-Work in small vertical slices that prove the product loop:
+```text
+login/register
+  → create household | accept invitation
+  → connect provider and bind it to the household
+  → outbox: import up to 100 receipts → summarize member memory in Mem0
+  → text/audio food intent
+  → classify → plan meals → search provider products
+  → save local meal plan and optional proposal
+  → household edits
+  → owner approves
+  → update provider basket → save local order/delivery
+  → feedback → memory update
+```
 
-1. create a household and authenticate;
-2. add a food intention;
-3. load household memory and propose a plan;
-4. search Silpo products;
-5. collect member changes;
-6. approve or reject as the owner;
-7. update the Silpo basket;
-8. record feedback and schedule a follow-up.
+Provider connection may be skipped during onboarding. Meal planning and household collaboration still work without it; receipt import, product-backed proposals, basket and delivery operations remain unavailable and return explicit provider errors where applicable.
 
-Keep the implementation understandable and avoid building features outside the MVP. Product requirements and the end-to-end demo scenario are documented in [docs/prd.md](docs/prd.md); the product concept is in [docs/idea.md](docs/idea.md).
+Product requirements and the detailed architecture are documented in [docs/prd.md](docs/prd.md), [docs/idea.md](docs/idea.md) and [docs/architecture.md](docs/architecture.md).
 
 ## Repository status
 
-This repository contains the product documentation, Expo app, Hono API, shared contracts and Drizzle database package. The system is still in active scaffold development; current gaps and deferred decisions are tracked in [docs/architecture.md](docs/architecture.md).
+This repository contains the product documentation, Expo app, Hono API, shared contracts and Drizzle database package. The active MVP path and deferred work are tracked in [docs/architecture.md](docs/architecture.md).

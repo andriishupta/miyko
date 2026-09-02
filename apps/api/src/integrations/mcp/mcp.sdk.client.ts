@@ -95,20 +95,8 @@ export class SdkMcpClient implements McpClient {
     return this.call(mcpConfig.toolNames.searchProducts, { query: input.query, category: input.category, limit: input.limit }, input.accessToken)
   }
 
-  getProduct(input: { productId: string; accessToken: string }) {
-    return this.call(mcpConfig.toolNames.getProduct, { productId: input.productId }, input.accessToken)
-  }
-
-  getReplacements(input: { productId: string; accessToken: string }) {
-    return this.call(mcpConfig.toolNames.getReplacements, { productId: input.productId }, input.accessToken)
-  }
-
   getOrderHistory(input: { householdId: string; accessToken: string }) {
     return this.call(mcpConfig.toolNames.getOrderHistory, { householdId: input.householdId }, input.accessToken)
-  }
-
-  getBasket(input: { householdId: string; accessToken: string }) {
-    return this.call(mcpConfig.toolNames.getBasket, { householdId: input.householdId }, input.accessToken)
   }
 
   updateBasket(input: BasketUpdateInput) {

@@ -20,7 +20,6 @@ const orderRecordSchema = z.object({
   externalOrderId: z.string().min(1), status: z.string().min(1), total: z.number().nonnegative(), currency: z.literal('UAH'), placedAt: z.string().datetime().nullable(), items: z.array(orderItemSchema), delivery: z.object({ externalDeliveryId: z.string().min(1), status: z.enum(['pending', 'scheduled', 'in_transit', 'delivered', 'cancelled', 'failed']), scheduledFrom: z.string().datetime().nullable(), scheduledTo: z.string().datetime().nullable() }).strict().nullable(),
 }).strict()
 
-const basketSchema = z.object({ householdId: z.string().min(1), items: z.array(z.object({ productId: z.string().min(1), quantity: z.number().int().positive() }).strict()) }).strict()
 const basketResultSchema = z.object({ basketId: z.string().min(1), updated: z.boolean() }).strict()
 const productSearchInputSchema = z.object({ query: z.string().max(100), category: z.string().max(60).optional(), limit: z.number().int().min(1).max(50), accessToken: z.string().min(1) }).strict()
 const basketUpdateInputSchema = z.object({ householdId: z.string().min(1), proposalId: z.string().min(1), items: z.array(z.object({ productId: z.string().min(1), quantity: z.number().int().min(1).max(50) }).strict()).max(50), accessToken: z.string().min(1) }).strict()
@@ -84,21 +83,8 @@ export class McpService {
     return parseExternal(collectionSchema(productSchema), await readWithRetry('products/search', () => this.client.searchProducts(checkedInput)))
   }
 
-  async getProduct(input: { productId: string; accessToken: string }) {
-    const product = await readWithRetry('products/details', () => this.client.getProduct(input))
-    return parseExternal(productSchema.nullable(), product)
-  }
-
-  async getReplacements(input: { productId: string; accessToken: string }) {
-    return parseExternal(collectionSchema(productSchema), await readWithRetry('products/replacements', () => this.client.getReplacements(input)))
-  }
-
   async getOrderHistory(input: { householdId: string; accessToken: string }): Promise<McpOrderRecord[]> {
     return parseExternal(collectionSchema(orderRecordSchema), await readWithRetry('orders/history', () => this.client.getOrderHistory(input)))
-  }
-
-  async getBasket(input: { householdId: string; accessToken: string }) {
-    return parseExternal(basketSchema, await readWithRetry('basket/read', () => this.client.getBasket(input)))
   }
 
   async updateBasket(input: Parameters<McpClient['updateBasket']>[0], ownerApproved: boolean) {

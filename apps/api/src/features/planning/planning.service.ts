@@ -54,10 +54,12 @@ export class PlanningService {
         text: intent.text,
         namespace: `member:${context.membership.id}`,
         providerHistory: history,
-        searchProducts: provider ? (query) => storeProviderService.searchProducts(context, provider.slug, query, 5) : null,
       })
       if (!graph.plan) throw new AppError('AGENT_PLAN_MISSING', 'Agent did not return a meal plan', 502)
-      const parsedProducts = z.array(agentProductSchema).safeParse(graph.products)
+      const providerProductsResult = provider
+        ? (await Promise.all(graph.productQueries.map((query) => storeProviderService.searchProducts(context, provider.slug, query, 5)))).flat()
+        : []
+      const parsedProducts = z.array(agentProductSchema).safeParse(providerProductsResult)
       if (!parsedProducts.success) throw new AppError('AGENT_PRODUCT_RESULT_INVALID', 'Agent returned invalid product data', 502)
       const products = Array.from(new Map(parsedProducts.data.map((product) => [product.providerProductId, product])).values()).slice(0, 50)
 
@@ -100,7 +102,7 @@ export class PlanningService {
         }
 
         const updatedIntentRows = await tx.update(foodIntents).set({ normalizedStatus: 'planned', updatedAt: now }).where(eq(foodIntents.id, intent.id)).returning()
-        const updatedRunRows = await tx.update(planningRuns).set({ status: 'completed', langgraphThreadId: graph.threadId, langgraphRunId: graph.runId, completedAt: now, updatedAt: now }).where(eq(planningRuns.id, run.id)).returning()
+        const updatedRunRows = await tx.update(planningRuns).set({ status: 'completed', threadId: graph.threadId, runId: graph.runId, completedAt: now, updatedAt: now }).where(eq(planningRuns.id, run.id)).returning()
         if (!updatedIntentRows[0] || !updatedRunRows[0]) throw new AppError('PLANNING_RESULT_NOT_SAVED', 'Planning result could not be saved', 503)
         return { intent: updatedIntentRows[0], run: updatedRunRows[0], plan, planItemRows, proposal, proposalItems }
       })

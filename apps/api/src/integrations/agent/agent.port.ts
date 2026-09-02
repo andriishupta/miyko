@@ -1,11 +1,3 @@
-import type { ZodType } from 'zod'
-
-export type AgentMessage = { role: 'system' | 'user' | 'assistant'; content: string }
-
-export interface AgentModel {
-  json<T>(messages: AgentMessage[], schema: ZodType<T>): Promise<T>
-}
-
 export type MemoryInitializationInput = {
   namespace: string
   receipts: unknown[]
@@ -23,7 +15,6 @@ export type FoodIntentInput = {
   text: string
   namespace: string
   providerHistory: unknown[]
-  searchProducts: ((query: string) => Promise<unknown[]>) | null
 }
 
 export type FoodIntentResult = {
@@ -31,10 +22,27 @@ export type FoodIntentResult = {
   runId: string
   classification: { type: 'meal_planning' | 'shopping' | 'feedback' | 'other'; summary: string; confidence: number } | null
   plan: { title: string; meals: Array<{ name: string; ingredients: string[] }> } | null
-  products: unknown[]
+  productQueries: string[]
+}
+
+export type OrderWorkflowInput = {
+  proposalId: string
+  householdId: string
+  eventId: string
+  decision?: 'approved' | 'declined'
+  proposal?: unknown
+}
+
+export type WorkflowReference = {
+  provider: 'langgraph'
+  threadId: string
+  runId: string
+  status: 'pending' | 'running' | 'error' | 'success' | 'timeout' | 'interrupted'
 }
 
 export interface AgentLayer {
   initializeMemory(input: MemoryInitializationInput): Promise<MemoryInitializationResult>
   foodIntent(input: FoodIntentInput): Promise<FoodIntentResult>
+  startOrderWorkflow(input: OrderWorkflowInput): Promise<WorkflowReference>
+  resumeOrderWorkflow(input: OrderWorkflowInput & { threadId: string; decision: 'approved' | 'declined' }): Promise<WorkflowReference>
 }

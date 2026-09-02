@@ -5,14 +5,16 @@ import { db } from '../../lib/database.js'
 import { AppError, notFound } from '../../lib/errors.js'
 import { mem0Client } from '../../integrations/memory/mem0.client.js'
 import { memoryInitializationService } from '../../integrations/memory/memory-initialization.service.js'
+import { agentLayer } from '../../integrations/agent/graphs.js'
 import { providerSyncService } from '../../integrations/store-providers/provider-sync.service.js'
+import { ordersService } from '../orders/orders.service.js'
 import type { OutboxEventRow } from './outbox.service.js'
 import { z } from 'zod'
 
 const providerSyncPayload = z.object({ providerId: z.string().uuid(), connectedAccountId: z.string().uuid().optional(), providerSlug: z.string().min(1).optional() }).strict()
 const memoryPayload = z.object({ memberId: z.string().uuid() }).strict()
 const feedbackPayload = z.object({ feedbackId: z.string().uuid() }).strict()
-const proposalPayload = z.object({ proposalId: z.string().uuid() }).strict()
+const proposalPayload = z.object({ proposalId: z.string().uuid() }).passthrough()
 const deliveryPayload = z.object({ orderId: z.string().uuid(), providerSlug: z.string().min(1).optional() }).strict()
 
 const payloadOf = <T>(event: OutboxEventRow, schema: z.ZodType<T>) => {
@@ -57,8 +59,10 @@ export const outboxHandlers: Record<string, OutboxHandler> = {
 
   async 'proposal.created'(context, event) {
     const { proposalId } = payloadOf(event, proposalPayload)
-    const row = await db.query.shoppingProposals.findFirst({ where: and(eq(shoppingProposals.id, proposalId), eq(shoppingProposals.householdId, context.household.id)) })
+    const row = await db.query.shoppingProposals.findFirst({ where: and(eq(shoppingProposals.id, proposalId), eq(shoppingProposals.householdId, context.household.id)), with: { items: true } })
     if (!row) throw notFound('Shopping proposal')
+    const workflow = await agentLayer.startOrderWorkflow({ proposalId, householdId: context.household.id, eventId: event.id, proposal: row })
+    await db.update(shoppingProposals).set({ workflowProvider: workflow.provider, workflowThreadId: workflow.threadId, workflowRunId: workflow.runId, workflowStatus: workflow.status, updatedAt: new Date() }).where(eq(shoppingProposals.id, proposalId))
     await audit(context, event, 'proposal.created', proposalId)
   },
 
@@ -66,6 +70,10 @@ export const outboxHandlers: Record<string, OutboxHandler> = {
     const { proposalId } = payloadOf(event, proposalPayload)
     const row = await db.query.shoppingProposals.findFirst({ where: and(eq(shoppingProposals.id, proposalId), eq(shoppingProposals.householdId, context.household.id)) })
     if (!row) throw notFound('Shopping proposal')
+    if (!row.workflowThreadId) throw new AppError('WORKFLOW_REFERENCE_MISSING', 'Proposal workflow reference is missing', 409)
+    await ordersService.applyApprovedProposal(context, proposalId)
+    const workflow = await agentLayer.resumeOrderWorkflow({ proposalId, householdId: context.household.id, eventId: event.id, threadId: row.workflowThreadId, decision: 'approved' })
+    await db.update(shoppingProposals).set({ workflowRunId: workflow.runId, workflowStatus: workflow.status, updatedAt: new Date() }).where(eq(shoppingProposals.id, proposalId))
     await audit(context, event, 'proposal.approved', proposalId)
   },
 
@@ -73,6 +81,9 @@ export const outboxHandlers: Record<string, OutboxHandler> = {
     const { proposalId } = payloadOf(event, proposalPayload)
     const row = await db.query.shoppingProposals.findFirst({ where: and(eq(shoppingProposals.id, proposalId), eq(shoppingProposals.householdId, context.household.id)) })
     if (!row) throw notFound('Shopping proposal')
+    if (!row.workflowThreadId) throw new AppError('WORKFLOW_REFERENCE_MISSING', 'Proposal workflow reference is missing', 409)
+    const workflow = await agentLayer.resumeOrderWorkflow({ proposalId, householdId: context.household.id, eventId: event.id, threadId: row.workflowThreadId, decision: 'declined' })
+    await db.update(shoppingProposals).set({ workflowRunId: workflow.runId, workflowStatus: workflow.status, updatedAt: new Date() }).where(eq(shoppingProposals.id, proposalId))
     await audit(context, event, 'proposal.declined', proposalId)
   },
 

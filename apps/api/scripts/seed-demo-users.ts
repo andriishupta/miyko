@@ -67,7 +67,7 @@ try {
     }).onConflictDoNothing()
   }
 
-  await db.insert(shoppingProviders).values({ id: providerId, name: 'Silpo', slug: 'silpo', kind: 'store', status: 'active', capabilities: ['products.search', 'products.replacements', 'receipts.read', 'orders.history', 'basket.update', 'deliveries.read'] }).onConflictDoUpdate({ target: shoppingProviders.id, set: { name: 'Silpo', slug: 'silpo', kind: 'store', status: 'active', capabilities: ['products.search', 'products.replacements', 'receipts.read', 'orders.history', 'basket.update', 'deliveries.read'], updatedAt: new Date() } })
+  await db.insert(shoppingProviders).values({ id: providerId, name: 'Silpo', slug: 'silpo', kind: 'store', status: 'active', capabilities: ['products.search', 'receipts.read', 'orders.history', 'basket.update'] }).onConflictDoUpdate({ target: shoppingProviders.id, set: { name: 'Silpo', slug: 'silpo', kind: 'store', status: 'active', capabilities: ['products.search', 'receipts.read', 'orders.history', 'basket.update'], updatedAt: new Date() } })
   await db.insert(shoppingProviders).values({ id: deliveryProviderId, name: 'Bolt', slug: 'bolt', kind: 'delivery', status: 'active', capabilities: ['deliveries.create', 'deliveries.track'] }).onConflictDoNothing()
   await db.insert(providerProducts).values([
     { id: productIds[0], providerId, providerProductId: 'demo-milk-1l', normalizedName: 'Молоко 2.5% 1 л', details: { price: 45.9, unit: 'bottle', category: 'dairy', available: true, currency: 'UAH' } },
@@ -79,7 +79,7 @@ try {
     normalizedStatus: 'planned', source: 'text', desiredDate: date('2026-09-03T00:00:00Z'), desiredDateEnd: date('2026-09-09T00:00:00Z'),
   }).onConflictDoNothing()
   await db.insert(planningRuns).values({
-    id: planningRunId, householdId, startedByMemberId: memberIds[2], status: 'completed', langgraphThreadId: 'demo-thread-1', langgraphRunId: 'demo-run-1', startedAt: date('2026-09-01T09:00:00Z'), completedAt: date('2026-09-01T09:01:00Z'),
+    id: planningRunId, householdId, startedByMemberId: memberIds[2], status: 'completed', threadId: 'demo-thread-1', runId: 'demo-run-1', startedAt: date('2026-09-01T09:00:00Z'), completedAt: date('2026-09-01T09:01:00Z'),
   }).onConflictDoNothing()
   await db.insert(mealPlans).values({
     id: mealPlanId, householdId, planningRunId, createdByMemberId: memberIds[2], name: 'Demo week plan', notes: 'Seed data for the first food loop', status: 'active',

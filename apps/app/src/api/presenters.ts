@@ -21,12 +21,16 @@ export function formatSchedule(value: string) {
   return new Intl.DateTimeFormat('uk-UA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 }
 
+export function formatDeliveryStatus(status: ApiDelivery['status']) {
+  return status === 'scheduled' ? 'Scheduled' : status === 'delivered' ? 'Delivered' : status === 'cancelled' ? 'Cancelled' : 'Pending';
+}
+
 export function presentDelivery(delivery: ApiDelivery, order: Order | null = null, productNames: Record<string, { name: string; unit: string }> = {}): UiDelivery {
   const products = order?.items ?? [];
   return {
     id: delivery.id,
     title: 'Grocery delivery',
-    status: delivery.status === 'scheduled' ? 'Scheduled' : delivery.status === 'delivered' ? 'Delivered' : delivery.status === 'cancelled' ? 'Cancelled' : 'Pending',
+    status: formatDeliveryStatus(delivery.status),
     date: delivery.scheduledFrom ? formatSchedule(delivery.scheduledFrom) : 'Schedule unavailable',
     eta: delivery.status === 'delivered' ? 'Completed' : 'Scheduled',
     total: order?.totalAmount === null || order?.totalAmount === undefined ? 'Total unavailable' : formatMoney(order.totalAmount, order.currency),

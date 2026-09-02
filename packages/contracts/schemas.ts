@@ -92,24 +92,6 @@ export const outboxEventPayloadSchema = z.union([
   z.object({ orderId: uuid, providerSlug: z.string().min(1).optional() }).strict(),
 ]);
 
-export const audioTranscriptionSchema = z.object({
-  text: z.string(),
-  language: z.string().nullable(),
-  durationMs: z.number().int().nonnegative().nullable(),
-});
-
-export const agentResponseSchema = z.object({
-  message: z.string(),
-  intentId: uuid.nullable(),
-  planningRunId: uuid.nullable(),
-  proposalId: uuid.nullable(),
-});
-
-export const audioAgentResponseSchema = z.object({
-  transcription: audioTranscriptionSchema,
-  agent: agentResponseSchema,
-});
-
 export const audioProcessResponseSchema = z.object({
   requestId: z.string().min(1),
   status: z.literal("processed"),
@@ -144,8 +126,8 @@ export const intentProcessResponseSchema = z.object({
     id: uuid,
     householdId: uuid,
     startedByMemberId: uuid,
-    langgraphThreadId: z.string().nullable(),
-    langgraphRunId: z.string().nullable(),
+    threadId: z.string().nullable(),
+    runId: z.string().nullable(),
     status: z.enum(["pending", "running", "paused", "completed", "failed", "cancelled"]),
     startedAt: isoDate.nullable(),
     pausedAt: isoDate.nullable(),
@@ -187,16 +169,11 @@ export const planningRunResponseSchema = z.object({
     id: uuid,
     householdId: uuid,
     startedByMemberId: uuid,
-    langgraphThreadId: z.string().nullable(),
-    langgraphRunId: z.string().nullable(),
+    threadId: z.string().nullable(),
+    runId: z.string().nullable(),
     status: z.enum(["pending", "running", "paused", "completed", "failed", "cancelled"]),
     startedAt: isoDate.nullable(),
     pausedAt: isoDate.nullable(),
     completedAt: isoDate.nullable(),
   }),
-});
-
-export const proposalWorkflowResponseSchema = z.object({
-  proposal: z.object({ id: uuid, householdId: uuid, status: z.string() }).passthrough(),
-  availableActions: z.array(z.enum(["edit", "approve", "decline", "comment"])),
 });

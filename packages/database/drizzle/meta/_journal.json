@@ -36,6 +36,13 @@
       "when": 1788333800000,
       "tag": "0004_outbox_memory_provider_security",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788334000000,
+      "tag": "0005_workflow_references",
+      "breakpoints": true
     }
   ]
 }

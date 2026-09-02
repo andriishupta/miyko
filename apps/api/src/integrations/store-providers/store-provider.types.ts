@@ -1,6 +1,5 @@
 import type {
   BasketUpdateResponse,
-  Provider,
   ProviderAuthRequest,
   ProviderOrder,
 } from '@miyko/contracts'
@@ -14,8 +13,6 @@ export type ProviderTokenSet = {
   refreshTokenExpiresAt: Date | null
   scopes: string[]
 }
-
-export type StoreProviderDefinition = Omit<Provider, 'id'>
 
 export type ProviderRequestContext = {
   householdId: string
@@ -46,12 +43,9 @@ export type StoreProviderProduct = {
 }
 
 export interface StoreProvider {
-  name: string
-  get(): StoreProviderDefinition
   discoverTools(): Promise<string[]>
   authenticate(input: ProviderAuthRequest): Promise<ProviderTokenSet>
   reauthorize(input: { refreshToken: string }): Promise<ProviderTokenSet>
-  getOrders(context: ProviderRequestContext): Promise<ProviderOrder[]>
   getOrderRecords(context: ProviderRequestContext): Promise<StoreProviderOrderRecord[]>
   searchProducts(context: ProviderRequestContext, input: { query: string; limit: number }): Promise<StoreProviderProduct[]>
   updateBasket(context: BasketUpdateContext): Promise<BasketUpdateResponse>

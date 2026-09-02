@@ -69,13 +69,6 @@ export type ProposalItemStatus =
   | "declined"
   | "replaced"
   | "edited";
-export type ProposalSuggestionType =
-  | "add"
-  | "replace"
-  | "quantity_change"
-  | "decline";
-export type ProposalDecision = "approve" | "decline" | "replace" | "edit";
-
 export type OrderStatus =
   | "pending"
   | "approved"
@@ -113,12 +106,6 @@ export type MemoryInitializationStatus =
   | "completed"
   | "failed"
   | "waiting_for_provider";
-export type NotificationStatus =
-  | "pending"
-  | "processing"
-  | "sent"
-  | "failed"
-  | "cancelled";
 export type OutboxStatus =
   | "pending"
   | "processing"
@@ -277,8 +264,8 @@ export type PlanningRun = {
   id: UUID;
   householdId: UUID;
   startedByMemberId: UUID;
-  langgraphThreadId: string | null;
-  langgraphRunId: string | null;
+  threadId: string | null;
+  runId: string | null;
   status: PlanningRunStatus;
   startedAt: ISODateString | null;
   pausedAt: ISODateString | null;
@@ -348,6 +335,10 @@ export type ShoppingProposal = {
   createdByMemberId: UUID;
   revision: number;
   status: ProposalStatus;
+  workflowProvider: "langgraph" | null;
+  workflowThreadId: string | null;
+  workflowRunId: string | null;
+  workflowStatus: "pending" | "running" | "error" | "success" | "timeout" | "interrupted" | null;
   approvedByMemberId: UUID | null;
   approvedAt: ISODateString | null;
   declinedByMemberId: UUID | null;
@@ -355,43 +346,6 @@ export type ShoppingProposal = {
   items: ProposalItem[];
   createdAt: ISODateString;
   updatedAt: ISODateString;
-};
-
-export type ProposalComment = {
-  id: UUID;
-  householdId: UUID;
-  proposalId: UUID;
-  proposalItemId: UUID | null;
-  memberId: UUID;
-  body: string;
-  createdAt: ISODateString;
-};
-
-export type ProposalSuggestion = {
-  id: UUID;
-  householdId: UUID;
-  proposalId: UUID;
-  proposalItemId: UUID | null;
-  memberId: UUID;
-  type: ProposalSuggestionType;
-  suggestedProductId: UUID | null;
-  suggestedQuantity: number | null;
-  suggestedUnit: string | null;
-  note: string | null;
-  createdAt: ISODateString;
-};
-
-export type ProposalItemDecision = {
-  id: UUID;
-  householdId: UUID;
-  proposalItemId: UUID;
-  memberId: UUID;
-  decision: ProposalDecision;
-  replacementProductId: UUID | null;
-  quantity: number | null;
-  unit: string | null;
-  comment: string | null;
-  createdAt: ISODateString;
 };
 
 export type OrderItem = {
@@ -475,22 +429,6 @@ export type MemoryInitializationStatusResponse = {
   lastError: string | null;
 };
 
-export type NotificationJob = {
-  id: UUID;
-  householdId: UUID;
-  recipientMemberId: UUID;
-  sourceEventId: UUID | null;
-  orderId: UUID | null;
-  scheduledAt: ISODateString;
-  nextCheckAt: ISODateString | null;
-  estimatedDurationDays: number | null;
-  title: string;
-  body: string;
-  status: NotificationStatus;
-  attempts: number;
-  sentAt: ISODateString | null;
-};
-
 export type OutboxEvent = {
   id: UUID;
   householdId: UUID;
@@ -513,24 +451,6 @@ export type OutboxEventPayload =
   | { memberId: UUID }
   | { providerId: UUID; connectedAccountId: UUID; providerSlug?: string }
   | { orderId: UUID; providerSlug?: string };
-
-export type AudioTranscription = {
-  text: string;
-  language: string | null;
-  durationMs: number | null;
-};
-
-export type AgentResponse = {
-  message: string;
-  intentId: UUID | null;
-  planningRunId: UUID | null;
-  proposalId: UUID | null;
-};
-
-export type AudioAgentResponse = {
-  transcription: AudioTranscription;
-  agent: AgentResponse;
-};
 
 export type AudioProcessResponse = {
   requestId: string;
@@ -564,11 +484,6 @@ export type IntentProcessResponse = {
 
 export type PlanningRunResponse = {
   run: PlanningRun;
-};
-
-export type ProposalWorkflowResponse = {
-  proposal: ShoppingProposal;
-  availableActions: Array<"edit" | "approve" | "decline" | "comment">;
 };
 
 export type LoginResponse = AuthSession;
@@ -664,10 +579,7 @@ export type ApiError = {
 export type ApiResponse<T> = { data: T } | { error: ApiError };
 
 export {
-  agentResponseSchema,
-  audioAgentResponseSchema,
   audioProcessResponseSchema,
-  audioTranscriptionSchema,
   intentProcessResponseSchema,
   memoryInitializationStatusResponseSchema,
   outboxEventPayloadSchema,
@@ -681,6 +593,5 @@ export {
   providerSchema,
   providerSyncResponseSchema,
   providerSyncStatusResponseSchema,
-  proposalWorkflowResponseSchema,
   userProviderAccountSchema,
 } from "./schemas.js";

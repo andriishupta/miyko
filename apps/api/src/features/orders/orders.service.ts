@@ -122,26 +122,25 @@ export class OrdersService {
       await tx.insert(outboxEvents).values({ householdId: context.household.id, aggregateType: 'shopping_proposal', aggregateId: proposal.id, eventType: 'proposal.approved', version: proposal.revision, payload: { proposalId: proposal.id, approvedByMemberId: context.membership.id } })
       await tx.insert(idempotencyKeys).values({ householdId: context.household.id, key: idempotencyKey, operation: 'proposal.approve', status: 'completed', aggregateType: 'shopping_proposal', aggregateId: proposal.id, response: { proposalId: proposal.id }, expiresAt: new Date(Date.now() + 86_400_000) })
     })
-    const approved = await this.getProposal(context, proposal.id)
-    try {
-      const products = await Promise.all(approved.items.map((item) => db.query.providerProducts.findFirst({ where: eq(providerProducts.id, item.productId), with: { provider: true } })))
-      const provider = products[0]?.provider
-      if (!provider || products.some((product) => !product || product.providerId !== provider.id)) throw conflict('Proposal must use one store provider')
-      const connection = await storeProviderService.updateBasket(context, provider.slug, { proposalId: proposal.id, items: approved.items.map((item) => ({ productId: item.productId, quantity: item.quantity })) })
-      await db.update(shoppingProposals).set({ status: 'applied', updatedAt: new Date() }).where(eq(shoppingProposals.id, proposal.id))
-      {
-        await db.transaction(async (tx) => {
-          const orderRows = await tx.insert(orders).values({ householdId: context.household.id, providerId: connection.provider.id, connectedAccountId: connection.connectedAccountId, proposalId: proposal.id, providerBasketId: connection.basket.basketId, status: 'in_cart', totalAmount: String(approved.items.reduce((sum, item) => sum + (item.estimatedTotalPrice ?? 0), 0)), currency: 'UAH', syncStatus: 'succeeded', lastProviderSyncAt: new Date() }).returning()
-          const order = orderRows[0]
-          await tx.insert(orderItems).values(approved.items.map((item) => ({ householdId: context.household.id, orderId: order.id, productId: item.productId, providerProductIdSnapshot: item.productId, productNameSnapshot: item.productName, quantity: String(item.quantity), unit: item.unit, unitPriceSnapshot: item.estimatedUnitPrice === null ? null : String(item.estimatedUnitPrice), totalPriceSnapshot: item.estimatedTotalPrice === null ? null : String(item.estimatedTotalPrice), currency: 'UAH', status: 'added' })))
-          await tx.insert(outboxEvents).values({ householdId: context.household.id, aggregateType: 'order', aggregateId: order.id, eventType: 'delivery.sync_requested', version: 1, payload: { orderId: order.id, providerSlug: provider.slug } })
-        })
-      }
-    } catch (error) {
-      await db.update(shoppingProposals).set({ status: 'failed', updatedAt: new Date() }).where(eq(shoppingProposals.id, proposal.id))
-      throw error
-    }
     return this.getProposal(context, proposal.id)
+  }
+
+  async applyApprovedProposal(context: RequestContext, proposalId: string) {
+    const existingOrder = await db.query.orders.findFirst({ where: and(eq(orders.householdId, context.household.id), eq(orders.proposalId, proposalId)) })
+    if (existingOrder) return
+    const proposal = await this.getProposal(context, proposalId)
+    if (proposal.status !== 'approved') throw conflict('Proposal is not approved')
+    const products = await Promise.all(proposal.items.map((item) => db.query.providerProducts.findFirst({ where: eq(providerProducts.id, item.productId), with: { provider: true } })))
+    const provider = products[0]?.provider
+    if (!provider || products.some((product) => !product || product.providerId !== provider.id)) throw conflict('Proposal must use one store provider')
+    const connection = await storeProviderService.updateBasket(context, provider.slug, { proposalId, items: proposal.items.map((item) => ({ productId: item.productId, quantity: item.quantity })) })
+    await db.transaction(async (tx) => {
+      const orderRows = await tx.insert(orders).values({ householdId: context.household.id, providerId: connection.provider.id, connectedAccountId: connection.connectedAccountId, proposalId, providerBasketId: connection.basket.basketId, status: 'in_cart', totalAmount: String(proposal.items.reduce((sum, item) => sum + (item.estimatedTotalPrice ?? 0), 0)), currency: 'UAH', syncStatus: 'succeeded', lastProviderSyncAt: new Date() }).returning()
+      const order = orderRows[0]
+      await tx.insert(orderItems).values(proposal.items.map((item) => ({ householdId: context.household.id, orderId: order.id, productId: item.productId, providerProductIdSnapshot: item.productId, productNameSnapshot: item.productName, quantity: String(item.quantity), unit: item.unit, unitPriceSnapshot: item.estimatedUnitPrice === null ? null : String(item.estimatedUnitPrice), totalPriceSnapshot: item.estimatedTotalPrice === null ? null : String(item.estimatedTotalPrice), currency: 'UAH', status: 'added' })))
+      await tx.update(shoppingProposals).set({ status: 'applied', updatedAt: new Date() }).where(eq(shoppingProposals.id, proposalId))
+      await tx.insert(outboxEvents).values({ householdId: context.household.id, aggregateType: 'order', aggregateId: order.id, eventType: 'delivery.sync_requested', version: 1, payload: { orderId: order.id, providerSlug: provider.slug } })
+    })
   }
 
   async decline(context: RequestContext, proposalId: string, idempotencyKey: string) {

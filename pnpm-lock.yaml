@@ -219,6 +219,9 @@ importers:
       '@langchain/langgraph':
         specifier: ^1.4.13
         version: 1.4.13(@langchain/core@1.2.9(openai@4.104.0(ws@8.21.3)(zod@3.25.76))(ws@8.21.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)(zod@3.25.76)
+      '@langchain/langgraph-sdk':
+        specifier: ^1.10.0
+        version: 1.10.0(@langchain/core@1.2.9(openai@4.104.0(ws@8.21.3)(zod@3.25.76))(ws@8.21.3))(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       '@miyko/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

@@ -685,8 +685,9 @@ export const planningRuns = pgTable(
     startedByMemberId: uuid("started_by_member_id")
       .notNull()
       .references(() => householdMembers.id, { onDelete: "restrict" }),
-    langgraphThreadId: varchar("langgraph_thread_id", { length: 255 }),
-    langgraphRunId: varchar("langgraph_run_id", { length: 255 }),
+    // Keep the physical column names stable; these values are generic correlation IDs.
+    threadId: varchar("langgraph_thread_id", { length: 255 }),
+    runId: varchar("langgraph_run_id", { length: 255 }),
     status: planningRunStatusEnum("status").notNull().default("pending"),
     context: jsonb("context").$type<JsonObject>(),
     startedAt: optionalTimestampColumn("started_at"),
@@ -697,7 +698,7 @@ export const planningRuns = pgTable(
   },
   (table) => [
     ...householdCrudPolicies("planning_runs", table.householdId),
-    uniqueIndex("planning_runs_langgraph_thread_uq").on(table.langgraphThreadId),
+    uniqueIndex("planning_runs_langgraph_thread_uq").on(table.threadId),
     index("planning_runs_household_status_idx").on(table.householdId, table.status),
   ],
 ).enableRLS();
@@ -816,7 +817,7 @@ export const memorySyncRecords = pgTable(
   ],
 ).enableRLS();
 
-/** Tracks the asynchronous first-memory bootstrap independently of household onboarding. */
+/** Tracks the asynchronous first-memory bootstrap after provider binding. */
 export const memoryInitializations = pgTable(
   "memory_initializations",
   {
@@ -910,6 +911,10 @@ export const shoppingProposals = pgTable(
       .references(() => householdMembers.id, { onDelete: "restrict" }),
     revision: integer("revision").notNull().default(1),
     status: proposalStatusEnum("status").notNull().default("draft"),
+    workflowProvider: varchar("workflow_provider", { length: 32 }).$type<"langgraph">(),
+    workflowThreadId: varchar("workflow_thread_id", { length: 255 }),
+    workflowRunId: varchar("workflow_run_id", { length: 255 }),
+    workflowStatus: varchar("workflow_status", { length: 32 }).$type<"pending" | "running" | "error" | "success" | "timeout" | "interrupted">(),
     approvedByMemberId: uuid("approved_by_member_id").references(() => householdMembers.id, {
       onDelete: "set null",
     }),
@@ -924,6 +929,7 @@ export const shoppingProposals = pgTable(
   (table) => [
     ...householdCrudPolicies("shopping_proposals", table.householdId),
     index("shopping_proposals_household_status_idx").on(table.householdId, table.status),
+    uniqueIndex("shopping_proposals_workflow_thread_uq").on(table.workflowProvider, table.workflowThreadId),
     index("shopping_proposals_revision_idx").on(table.id, table.revision),
     check(
       "shopping_proposals_approval_consistency",

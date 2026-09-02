@@ -1,8 +1,7 @@
-import { and, desc, eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import {
   connectedProviderAccounts,
   memoryInitializations,
-  outboxEvents,
   shoppingProviders,
   userProviderAccounts,
 } from '@miyko/database/schema'
@@ -67,7 +66,7 @@ export class StoreProviderService {
     const tokenSet = await provider.authenticate(input)
     const previous = tokenSet.providerSubject
       ? await this.findAccountBySubject(user.id, providerRow.id, tokenSet.providerSubject)
-      : undefined
+      : await this.findAccount(user.id, providerRow.id)
     const account = await this.saveTokenSet(user.id, providerRow.id, tokenSet, previous?.id, previous)
     return { provider: toProvider(providerRow), account: toAccount(account) }
   }
@@ -106,27 +105,12 @@ export class StoreProviderService {
           eq(connectedProviderAccounts.authorizedByMemberId, memberId),
         ),
       })
-      const shouldRequestSync = !existing || existing.status !== 'active'
       if (existing) {
-        await db.transaction(async (tx) => {
-          await tx.update(connectedProviderAccounts).set({ userProviderAccountId: account.id, status: 'active', revokedAt: null, updatedAt: new Date() }).where(eq(connectedProviderAccounts.id, existing.id))
-          if (shouldRequestSync) {
-            const latest = await tx.query.outboxEvents.findFirst({ where: and(eq(outboxEvents.aggregateType, 'connected_provider_account'), eq(outboxEvents.aggregateId, existing.id), eq(outboxEvents.eventType, 'provider.sync_requested')), orderBy: [desc(outboxEvents.version)] })
-            await tx.insert(outboxEvents).values({ householdId, aggregateType: 'connected_provider_account', aggregateId: existing.id, eventType: 'provider.sync_requested', version: latest ? latest.version + 1 : 1, payload: { providerId: provider.id, connectedAccountId: existing.id, providerSlug: provider.slug } })
-          }
-        })
+        await db.update(connectedProviderAccounts).set({ userProviderAccountId: account.id, status: 'active', revokedAt: null, updatedAt: new Date() }).where(eq(connectedProviderAccounts.id, existing.id))
       } else {
-        const rows = await db.transaction(async (tx) => {
-          const rows = await tx.insert(connectedProviderAccounts).values({ householdId, providerId: account.providerId, userProviderAccountId: account.id, authorizedByMemberId: memberId, status: 'active' }).returning()
-          if (rows[0]) await tx.insert(outboxEvents).values({ householdId, aggregateType: 'connected_provider_account', aggregateId: rows[0].id, eventType: 'provider.sync_requested', version: 1, payload: { providerId: provider.id, connectedAccountId: rows[0].id, providerSlug: provider.slug } })
-          return rows
-        })
-        await this.requeueWaitingMemory(householdId, memberId)
-        continue
+        await db.insert(connectedProviderAccounts).values({ householdId, providerId: account.providerId, userProviderAccountId: account.id, authorizedByMemberId: memberId, status: 'active' })
       }
-      if (shouldRequestSync && existing) {
-        await this.requeueWaitingMemory(householdId, memberId)
-      }
+      await this.requestMemoryInitialization(householdId, memberId)
     }
   }
 
@@ -140,19 +124,13 @@ export class StoreProviderService {
   }
 
   async getOrders(context: RequestContext, providerSlug: string): Promise<ProviderOrdersResponse> {
-    const result = await this.withAccount(context, providerSlug, 'orders.history', (provider, token) => provider.getOrders({ householdId: context.household.id, accessToken: token.accessToken }))
+    const result = await this.withAccount(context, providerSlug, 'orders.history', async (provider, token) => (await provider.getOrderRecords({ householdId: context.household.id, accessToken: token.accessToken })).map((record) => record.order))
     return { provider: result.provider, items: result.value }
   }
 
   async searchProducts(context: RequestContext, providerSlug: string, query: string, limit = 10): Promise<StoreProviderProduct[]> {
     const result = await this.withAccount(context, providerSlug, 'products.search', (provider, token) => provider.searchProducts({ householdId: context.household.id, accessToken: token.accessToken }, { query, limit }))
     return result.value
-  }
-
-  async activeProvider(context: RequestContext): Promise<{ id: string; slug: string }> {
-    const provider = await this.findActiveProvider(context)
-    if (!provider) throw providerNotConnected()
-    return provider
   }
 
   async findActiveProvider(context: RequestContext): Promise<{ id: string; slug: string } | null> {
@@ -185,7 +163,7 @@ export class StoreProviderService {
     const provider = storeProviderRegistry.get(providerSlug)
     const providerRow = await db.query.shoppingProviders.findFirst({ where: and(eq(shoppingProviders.slug, providerSlug), eq(shoppingProviders.kind, 'store'), eq(shoppingProviders.status, 'active')) })
     if (!providerRow) throw notFound('Store provider')
-    if (requiredCapability && (!providerRow.capabilities.includes(requiredCapability) || !provider.get().capabilities.includes(requiredCapability))) throw providerCapabilityUnsupported()
+    if (requiredCapability && !providerRow.capabilities.includes(requiredCapability)) throw providerCapabilityUnsupported()
     return { providerRow, provider }
   }
 
@@ -283,9 +261,9 @@ export class StoreProviderService {
     return null
   }
 
-  private async requeueWaitingMemory(householdId: string, memberId: string) {
-    const initialization = await db.query.memoryInitializations.findFirst({ where: and(eq(memoryInitializations.householdId, householdId), eq(memoryInitializations.memberId, memberId), eq(memoryInitializations.status, 'waiting_for_provider')) })
-    if (!initialization) return
+  private async requestMemoryInitialization(householdId: string, memberId: string) {
+    const completed = await db.query.memoryInitializations.findFirst({ where: and(eq(memoryInitializations.householdId, householdId), eq(memoryInitializations.memberId, memberId), eq(memoryInitializations.status, 'completed')) })
+    if (completed) return
     await outboxService.enqueue({ householdId, aggregateType: 'member', aggregateId: memberId, eventType: 'user.memory_initialization_requested', payload: { memberId } })
   }
 }
