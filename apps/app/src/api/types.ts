@@ -1,72 +1,29 @@
 import type {
-  AuthSession,
+  ApiResponse,
   AudioProcessResponse,
   DashboardResponse,
-  Delivery,
-  DeliveryDetailsResponse,
   HouseholdInvitation,
   HouseholdMember,
-  HouseholdRole,
   HouseholdSummary,
-  IntentProcessResponse,
   InvitationCreateResponse,
   LoginResponse,
-  MemoryInitializationStatusResponse,
-  PlanningRunResponse,
-  Product,
-  ProductReplacementsResponse,
-  ProductResponse,
-  ProductSearchResponse,
-  Order,
-  ShoppingProposal,
   Provider,
   ProviderAccountsResponse,
   ProviderConnectionResponse,
-  ProviderOrdersResponse,
-  ProviderSyncResponse,
-  UserProviderAccount,
-} from '@miyko/contracts';
+  RegisterRequest,
+  Workflow,
+} from "@miyko/contracts";
 
-export type ApiRole = HouseholdRole;
-
-export type AppSession = Pick<AuthSession, 'accessToken' | 'user' | 'householdId'>;
-
-export type ApiLoginResponse = LoginResponse;
-
+export type AppSession = Pick<LoginResponse, "accessToken" | "user" | "householdId">;
 export type ApiDashboard = DashboardResponse;
-
-export type ApiDeliverySummary = NonNullable<DashboardResponse['latestDelivery']>;
-
-export type ApiDelivery = Delivery;
-export type ApiDeliveryDetails = DeliveryDetailsResponse;
-
 export type ApiHouseholdSummary = HouseholdSummary;
-
 export type ApiHouseholdMember = HouseholdMember;
-
 export type ApiInvitation = HouseholdInvitation;
 export type ApiInvitationCreateResponse = InvitationCreateResponse;
-
-export type ApiProduct = Product;
-export type ApiProductSearchResponse = ProductSearchResponse;
-export type ApiProductResponse = ProductResponse;
-export type ApiProductReplacementsResponse = ProductReplacementsResponse;
-
-export type ApiOrderProposal = ShoppingProposal;
-export type ApiOrder = Order;
-
 export type ApiProvider = Provider;
-export type ApiUserProviderAccount = UserProviderAccount;
 export type ApiProviderAccountsResponse = ProviderAccountsResponse;
 export type ApiProviderConnectionResponse = ProviderConnectionResponse;
-export type ApiProviderOrdersResponse = ProviderOrdersResponse;
-
 export type ApiAudioProcessResponse = AudioProcessResponse;
-
-export type ApiIntentProcessResponse = IntentProcessResponse;
-
-export type ApiMemoryInitializationStatus = MemoryInitializationStatusResponse;
-
-export type ApiProviderSyncResponse = ProviderSyncResponse;
-
-export type ApiPlanningRunResponse = PlanningRunResponse;
+export type ApiWorkflow = Workflow;
+export type ApiResponseShape<T> = ApiResponse<T>;
+export type ApiRegisterRequest = RegisterRequest;

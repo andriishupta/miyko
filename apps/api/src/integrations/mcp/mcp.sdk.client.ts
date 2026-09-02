@@ -3,7 +3,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
 import { AppError } from '../../lib/errors.js'
 import { mcpConfig } from './mcp.config.js'
-import type { BasketUpdateInput, McpClient, ProductSearchInput, ProviderLoginInput } from './mcp.client.js'
+import type { McpClient, ProviderLoginInput } from './mcp.client.js'
 
 type JsonRecord = Record<string, unknown>
 
@@ -91,17 +91,6 @@ export class SdkMcpClient implements McpClient {
     return this.call(mcpConfig.toolNames.reauthorize, { refreshToken: input.refreshToken }, null)
   }
 
-  searchProducts(input: ProductSearchInput) {
-    return this.call(mcpConfig.toolNames.searchProducts, { query: input.query, category: input.category, limit: input.limit }, input.accessToken)
-  }
-
-  getOrderHistory(input: { householdId: string; accessToken: string }) {
-    return this.call(mcpConfig.toolNames.getOrderHistory, { householdId: input.householdId }, input.accessToken)
-  }
-
-  updateBasket(input: BasketUpdateInput) {
-    return this.call(mcpConfig.toolNames.updateBasket, { householdId: input.householdId, proposalId: input.proposalId, items: input.items }, input.accessToken)
-  }
 }
 
 export const sdkMcpClient = new SdkMcpClient()

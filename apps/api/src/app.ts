@@ -9,29 +9,21 @@ import { AppError } from './lib/errors.js'
 import { logger } from './lib/logger.js'
 import { authRoutes } from './features/auth/auth.routes.js'
 import { dashboardRoutes } from './features/dashboard/dashboard.routes.js'
-import { productsRoutes } from './features/products/products.routes.js'
 import { householdsRoutes, invitationAcceptanceRoutes, onboardingRoutes } from './features/households/households.routes.js'
-import { ordersRoutes } from './features/orders/orders.routes.js'
-import { deliveriesRoutes } from './features/deliveries/deliveries.routes.js'
 import { audioRoutes } from './features/audio/audio.routes.js'
 import { memoryRoutes } from './features/memory/memory.routes.js'
 import { householdProviderRoutes, providersRoutes } from './features/providers/providers.routes.js'
-import { intentsRoutes } from './features/intents/intents.routes.js'
-import { planningRoutes } from './features/planning/planning.routes.js'
+import { workflowsRoutes } from './features/workflows/workflows.routes.js'
 
 const protectedApi = new Hono()
 protectedApi.use('*', authMiddleware)
 protectedApi.use('*', householdContextMiddleware)
 protectedApi.route('/dashboard', dashboardRoutes)
-protectedApi.route('/products', productsRoutes)
 protectedApi.route('/household', householdsRoutes)
-protectedApi.route('/orders', ordersRoutes)
-protectedApi.route('/deliveries', deliveriesRoutes)
 protectedApi.route('/audio', audioRoutes)
 protectedApi.route('/memory', memoryRoutes)
 protectedApi.route('/providers', householdProviderRoutes)
-protectedApi.route('/intents', intentsRoutes)
-protectedApi.route('/planning', planningRoutes)
+protectedApi.route('/workflows', workflowsRoutes)
 
 export const app = new Hono()
 applySecurityMiddleware(app)

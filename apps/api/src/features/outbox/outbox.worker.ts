@@ -34,7 +34,7 @@ export class OutboxWorker {
 
   async runOnce(context: RequestContext) {
     return withRlsContext(context.user.id, async () => {
-      const claimed = await outboxService.claim(context, this.workerId)
+      const claimed = await outboxService.claim(context, this.workerId, 1)
       let published = 0
       let retrying = 0
       let deadLetter = 0

@@ -1,7 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 import {
   connectedProviderAccounts,
-  memoryInitializations,
   shoppingProviders,
   userProviderAccounts,
 } from '@miyko/database/schema'
@@ -11,23 +10,19 @@ import type {
   ProviderAccountsResponse,
   ProviderAuthRequest,
   ProviderConnectionResponse,
-  ProviderOrdersResponse,
-  ProviderSyncStatusResponse,
   RequestContext,
   UserProviderAccount,
 } from '@miyko/contracts'
 import { db } from '../../lib/database.js'
-import { AppError, notFound, providerCapabilityUnsupported, providerNotConnected, providerReauthorizationRequired } from '../../lib/errors.js'
+import { providerNotConnected, providerReauthorizationRequired, notFound } from '../../lib/errors.js'
 import { providerSecretStorage } from './provider-secret.storage.js'
 import { storeProviderRegistry } from './store-provider.registry.js'
-import type { ProviderTokenSet, StoreProvider, StoreProviderProduct } from './store-provider.types.js'
-import { outboxService } from '../../features/outbox/outbox.service.js'
+import type { ProviderTokenSet, StoreProvider } from './store-provider.types.js'
 
 const toProvider = (row: typeof shoppingProviders.$inferSelect): Provider => ({
   id: row.id,
   name: row.name,
   slug: row.slug,
-  kind: row.kind,
   status: row.status,
   capabilities: row.capabilities,
 })
@@ -47,7 +42,7 @@ const toAccount = (row: typeof userProviderAccounts.$inferSelect): UserProviderA
 
 export class StoreProviderService {
   async listProviders(): Promise<Provider[]> {
-    const rows = await db.query.shoppingProviders.findMany({ where: eq(shoppingProviders.kind, 'store') })
+    const rows = await db.query.shoppingProviders.findMany({ where: eq(shoppingProviders.status, 'active') })
     return rows.map(toProvider)
   }
 
@@ -62,7 +57,7 @@ export class StoreProviderService {
   }
 
   async connect(user: AuthUser, providerSlug: string, input: ProviderAuthRequest): Promise<ProviderConnectionResponse> {
-    const { providerRow, provider } = await this.resolve(providerSlug, 'authenticate')
+    const { providerRow, provider } = await this.resolve(providerSlug)
     const tokenSet = await provider.authenticate(input)
     const previous = tokenSet.providerSubject
       ? await this.findAccountBySubject(user.id, providerRow.id, tokenSet.providerSubject)
@@ -72,7 +67,7 @@ export class StoreProviderService {
   }
 
   async reauthorize(user: AuthUser, providerSlug: string, input: Partial<ProviderAuthRequest>): Promise<ProviderConnectionResponse> {
-    const { providerRow, provider } = await this.resolve(providerSlug, 'reauthorize')
+    const { providerRow, provider } = await this.resolve(providerSlug)
     const account = await this.findAccount(user.id, providerRow.id)
     if (!account) throw providerNotConnected()
 
@@ -87,7 +82,11 @@ export class StoreProviderService {
     const { providerRow } = await this.resolve(providerSlug)
     const account = await this.findAccount(user.id, providerRow.id)
     if (!account) throw providerNotConnected()
-    await db.update(userProviderAccounts).set({ status: 'revoked', accessTokenReference: null, refreshTokenReference: null, credentialReference: null, updatedAt: new Date() }).where(and(eq(userProviderAccounts.id, account.id), eq(userProviderAccounts.userId, user.id)))
+    const now = new Date()
+    await db.transaction(async (tx) => {
+      await tx.update(userProviderAccounts).set({ status: 'revoked', updatedAt: now }).where(and(eq(userProviderAccounts.id, account.id), eq(userProviderAccounts.userId, user.id)))
+      await tx.update(connectedProviderAccounts).set({ status: 'revoked', revokedAt: now, updatedAt: now }).where(eq(connectedProviderAccounts.userProviderAccountId, account.id))
+    })
     await providerSecretStorage.revoke(account.id)
     return { disconnected: true }
   }
@@ -110,7 +109,6 @@ export class StoreProviderService {
       } else {
         await db.insert(connectedProviderAccounts).values({ householdId, providerId: account.providerId, userProviderAccountId: account.id, authorizedByMemberId: memberId, status: 'active' })
       }
-      await this.requestMemoryInitialization(householdId, memberId)
     }
   }
 
@@ -123,47 +121,20 @@ export class StoreProviderService {
     return { provider: toProvider(providerRow), account: toAccount(account) }
   }
 
-  async getOrders(context: RequestContext, providerSlug: string): Promise<ProviderOrdersResponse> {
-    const result = await this.withAccount(context, providerSlug, 'orders.history', async (provider, token) => (await provider.getOrderRecords({ householdId: context.household.id, accessToken: token.accessToken })).map((record) => record.order))
-    return { provider: result.provider, items: result.value }
-  }
-
-  async searchProducts(context: RequestContext, providerSlug: string, query: string, limit = 10): Promise<StoreProviderProduct[]> {
-    const result = await this.withAccount(context, providerSlug, 'products.search', (provider, token) => provider.searchProducts({ householdId: context.household.id, accessToken: token.accessToken }, { query, limit }))
-    return result.value
-  }
-
-  async findActiveProvider(context: RequestContext): Promise<{ id: string; slug: string } | null> {
+  async findActiveProvider(context: RequestContext, providerSlug?: string): Promise<{ id: string; slug: string }> {
     const connections = await db.query.connectedProviderAccounts.findMany({
       where: and(eq(connectedProviderAccounts.householdId, context.household.id), eq(connectedProviderAccounts.status, 'active')),
       with: { provider: true, userProviderAccount: true },
     })
-    const connection = connections.find((item) => item.provider?.kind === 'store' && item.userProviderAccount?.userId === context.user.id && item.userProviderAccount.status === 'active')
-    return connection?.provider ? { id: connection.provider.id, slug: connection.provider.slug } : null
+    const connection = connections.find((item) => (!providerSlug || item.provider?.slug === providerSlug) && item.provider?.status === 'active' && item.userProviderAccount?.status === 'active')
+    if (!connection?.provider) throw providerNotConnected()
+    return { id: connection.provider.id, slug: connection.provider.slug }
   }
 
-  async syncStatus(context: RequestContext, providerSlug: string): Promise<ProviderSyncStatusResponse> {
-    const { providerRow } = await this.resolve(providerSlug)
-    const connections = await db.query.connectedProviderAccounts.findMany({ where: and(eq(connectedProviderAccounts.householdId, context.household.id), eq(connectedProviderAccounts.providerId, providerRow.id), eq(connectedProviderAccounts.status, 'active')), with: { userProviderAccount: true } })
-    const connection = connections.find((item) => item.userProviderAccount?.userId === context.user.id)
-    if (!connection) throw providerNotConnected()
-    return { connectedAccountId: connection.id, providerId: connection.providerId, status: connection.syncStatus, firstSyncedAt: connection.firstSyncedAt?.toISOString() ?? null, lastSyncedAt: connection.lastSyncedAt?.toISOString() ?? null, staleAt: connection.staleAt?.toISOString() ?? null, lastError: connection.lastSyncError }
-  }
-
-  async sync(context: RequestContext, providerSlug: string) {
-    return this.withAccount(context, providerSlug, 'receipts.read', (provider, token) => provider.getOrderRecords({ householdId: context.household.id, accessToken: token.accessToken }))
-  }
-
-  async updateBasket(context: RequestContext, providerSlug: string, input: { proposalId: string; items: Array<{ productId: string; quantity: number }> }) {
-    const result = await this.withAccount(context, providerSlug, 'basket.update', (provider, token) => provider.updateBasket({ householdId: context.household.id, proposalId: input.proposalId, items: input.items, accessToken: token.accessToken }))
-    return { provider: result.provider, connectedAccountId: result.account.id, basket: result.value }
-  }
-
-  private async resolve(providerSlug: string, requiredCapability?: string): Promise<{ providerRow: typeof shoppingProviders.$inferSelect; provider: StoreProvider }> {
+  private async resolve(providerSlug: string): Promise<{ providerRow: typeof shoppingProviders.$inferSelect; provider: StoreProvider }> {
     const provider = storeProviderRegistry.get(providerSlug)
-    const providerRow = await db.query.shoppingProviders.findFirst({ where: and(eq(shoppingProviders.slug, providerSlug), eq(shoppingProviders.kind, 'store'), eq(shoppingProviders.status, 'active')) })
+    const providerRow = await db.query.shoppingProviders.findFirst({ where: and(eq(shoppingProviders.slug, providerSlug), eq(shoppingProviders.status, 'active')) })
     if (!providerRow) throw notFound('Store provider')
-    if (requiredCapability && !providerRow.capabilities.includes(requiredCapability)) throw providerCapabilityUnsupported()
     return { providerRow, provider }
   }
 
@@ -181,8 +152,6 @@ export class StoreProviderService {
       accountLogin: tokenSet.accountLogin ?? previous?.accountLogin ?? null,
       authMethod: 'mcp' as const,
       status: 'active' as const,
-      accessTokenReference: null,
-      refreshTokenReference: null,
       scopes: tokenSet.scopes,
       accessTokenExpiresAt: tokenSet.accessTokenExpiresAt,
       refreshTokenExpiresAt: tokenSet.refreshTokenExpiresAt,
@@ -205,67 +174,11 @@ export class StoreProviderService {
     if (!secrets?.refreshToken) throw providerReauthorizationRequired()
     try {
       return await provider.reauthorize({ refreshToken: secrets.refreshToken })
-    } catch (error) {
-      if (error instanceof AppError && error.status >= 500) throw error
+    } catch {
       throw providerReauthorizationRequired()
     }
   }
 
-  private async liveToken(provider: StoreProvider, account: typeof userProviderAccounts.$inferSelect) {
-    if (account.status !== 'active') throw providerReauthorizationRequired()
-    const secrets = await providerSecretStorage.load(account.id)
-    if (!secrets) throw providerReauthorizationRequired()
-    if (account.refreshTokenExpiresAt && account.refreshTokenExpiresAt <= new Date()) throw providerReauthorizationRequired()
-    if (!account.accessTokenExpiresAt || account.accessTokenExpiresAt > new Date()) return { account, accessToken: secrets.accessToken }
-    const tokenSet = await this.refresh(provider, account)
-    const updated = await this.saveTokenSet(account.userId, account.providerId, tokenSet, account.id, account)
-    const refreshedSecrets = await providerSecretStorage.load(updated.id)
-    if (!refreshedSecrets) throw providerReauthorizationRequired()
-    return { account: updated, accessToken: refreshedSecrets.accessToken }
-  }
-
-  private async withAccount<T>(context: RequestContext, providerSlug: string, requiredCapability: string, operation: (provider: StoreProvider, token: { account: typeof userProviderAccounts.$inferSelect; accessToken: string }) => Promise<T>) {
-    const { providerRow, provider } = await this.resolve(providerSlug, requiredCapability)
-    const account = await this.findConnectedAccount(context, providerRow.id)
-    if (!account) throw providerNotConnected()
-    const token = await this.liveToken(provider, account)
-    try {
-      const value = await operation(provider, token)
-      await db.update(userProviderAccounts).set({ lastUsedAt: new Date() }).where(eq(userProviderAccounts.id, token.account.id))
-      return { provider: toProvider(providerRow), account: token.account, value }
-    } catch (error) {
-      if (!(error instanceof AppError) || !['PROVIDER_TOKEN_EXPIRED', 'MCP_AUTH_EXPIRED'].includes(error.code)) throw error
-      const tokenSet = await this.refresh(provider, token.account)
-      const updated = await this.saveTokenSet(token.account.userId, token.account.providerId, tokenSet, token.account.id, token.account)
-      const refreshed = await providerSecretStorage.load(updated.id)
-      if (!refreshed) throw providerReauthorizationRequired()
-      const value = await operation(provider, { account: updated, accessToken: refreshed.accessToken })
-      await db.update(userProviderAccounts).set({ lastUsedAt: new Date() }).where(eq(userProviderAccounts.id, updated.id))
-      return { provider: toProvider(providerRow), account: updated, value }
-    }
-  }
-
-  private async findConnectedAccount(context: RequestContext, providerId: string) {
-    const connections = await db.query.connectedProviderAccounts.findMany({
-      where: and(
-        eq(connectedProviderAccounts.householdId, context.household.id),
-        eq(connectedProviderAccounts.providerId, providerId),
-        eq(connectedProviderAccounts.status, 'active'),
-      ),
-      with: { userProviderAccount: true },
-    })
-    for (const connection of connections) {
-      const account = connection.userProviderAccount
-      if (account && account.userId === context.user.id && account.status === 'active') return account
-    }
-    return null
-  }
-
-  private async requestMemoryInitialization(householdId: string, memberId: string) {
-    const completed = await db.query.memoryInitializations.findFirst({ where: and(eq(memoryInitializations.householdId, householdId), eq(memoryInitializations.memberId, memberId), eq(memoryInitializations.status, 'completed')) })
-    if (completed) return
-    await outboxService.enqueue({ householdId, aggregateType: 'member', aggregateId: memberId, eventType: 'user.memory_initialization_requested', payload: { memberId } })
-  }
 }
 
 export const storeProviderService = new StoreProviderService()

@@ -1,6 +1,9 @@
 import { serve } from '@hono/node-server'
 import { app } from './app.js'
 import { config } from './lib/config.js'
+import { outboxWorker } from './features/outbox/outbox.worker.js'
 
-export const startServer = () => serve({ fetch: app.fetch, port: config.port })
-
+export const startServer = (onListen?: Parameters<typeof serve>[1]) => {
+  outboxWorker.start()
+  return serve({ fetch: app.fetch, port: config.port }, onListen)
+}

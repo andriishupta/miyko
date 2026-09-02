@@ -3,177 +3,37 @@ import { z } from "zod";
 const uuid = z.string().uuid();
 const isoDate = z.string().datetime({ offset: true });
 
-export const providerCapabilitySchema = z.string().min(1);
-
 export const providerSchema = z.object({
-  id: uuid,
-  name: z.string().min(1),
-  slug: z.string().min(1),
-  kind: z.enum(["store", "delivery"]),
+  id: uuid, name: z.string().min(1), slug: z.string().min(1),
   status: z.enum(["active", "inactive"]),
-  capabilities: z.array(providerCapabilitySchema),
-});
-
-export const providerAuthRequestSchema = z.object({
-  login: z.string().min(1),
-  password: z.string().min(1),
-});
-
-export const userProviderAccountSchema = z.object({
-  id: uuid,
-  providerId: uuid,
-  providerSubject: z.string().nullable(),
-  accountLogin: z.string().nullable(),
-  authMethod: z.enum(["oauth", "password", "api_key", "mcp"]),
-  status: z.enum(["active", "expired", "revoked", "reconnect_required"]),
-  scopes: z.array(z.string()),
-  accessTokenExpiresAt: isoDate.nullable(),
-  refreshTokenExpiresAt: isoDate.nullable(),
-  lastUsedAt: isoDate.nullable(),
-});
-
-export const providerConnectionResponseSchema = z.object({
-  provider: providerSchema,
-  account: userProviderAccountSchema,
-});
-
-export const providerAccountsResponseSchema = z.object({
-  items: z.array(userProviderAccountSchema.extend({ provider: providerSchema })),
-});
-
-export const providerOrderSchema = z.object({
-  id: z.string().min(1),
-  status: z.string().min(1),
-  total: z.number().nonnegative(),
-  currency: z.literal("UAH"),
-  placedAt: isoDate.nullable(),
-});
-
-export const providerOrdersResponseSchema = z.object({
-  provider: providerSchema,
-  items: z.array(providerOrderSchema),
-});
-
-export const providerSyncStatusResponseSchema = z.object({
-  connectedAccountId: uuid,
-  providerId: uuid,
-  status: z.enum(["pending", "running", "succeeded", "failed", "stale"]),
-  firstSyncedAt: isoDate.nullable(),
-  lastSyncedAt: isoDate.nullable(),
-  staleAt: isoDate.nullable(),
-  lastError: z.string().nullable(),
-});
-
-export const providerSyncResponseSchema = providerSyncStatusResponseSchema.extend({
-  provider: providerSchema,
-  requested: z.boolean(),
-  eventId: uuid.nullable(),
-});
-
-export const memoryInitializationStatusResponseSchema = z.object({
-  id: uuid,
-  userId: uuid,
-  householdId: uuid.nullable(),
-  memberId: uuid.nullable(),
-  providerAccountId: uuid.nullable(),
-  status: z.enum(["pending", "processing", "completed", "failed", "waiting_for_provider"]),
-  requestedAt: isoDate,
-  startedAt: isoDate.nullable(),
-  completedAt: isoDate.nullable(),
-  lastError: z.string().nullable(),
-});
-
-export const outboxEventPayloadSchema = z.union([
-  z.object({ proposalId: uuid }).strict(),
-  z.object({ proposalId: uuid, approvedByMemberId: uuid }).strict(),
-  z.object({ feedbackId: uuid }).strict(),
-  z.object({ memberId: uuid }).strict(),
-  z.object({ providerId: uuid, connectedAccountId: uuid, providerSlug: z.string().min(1).optional() }).strict(),
-  z.object({ orderId: uuid, providerSlug: z.string().min(1).optional() }).strict(),
-]);
-
-export const audioProcessResponseSchema = z.object({
-  requestId: z.string().min(1),
-  status: z.literal("processed"),
-  transcript: z.string().min(1),
-  intent: z.object({
-    type: z.enum(["meal_planning", "shopping", "feedback", "other"]),
-    summary: z.string().min(1),
-    confidence: z.number().min(0).max(1),
-  }).strict().nullable(),
-  response: z.object({ type: z.string().min(1), message: z.string().min(1) }).strict(),
-  foodIntentId: uuid.nullable(),
-  planningRunId: uuid,
-  mealPlanId: uuid,
-  proposalId: uuid.nullable(),
-  audioStored: z.boolean(),
-});
-
-export const intentProcessResponseSchema = z.object({
-  intent: z.object({
-    id: uuid,
-    householdId: uuid,
-    submittedByMemberId: uuid,
-    text: z.string().min(1),
-    status: z.enum(["active", "planned", "completed", "cancelled"]),
-    desiredDate: isoDate.nullable(),
-    desiredDateEnd: isoDate.nullable(),
-    source: z.enum(["text", "audio"]),
-    createdAt: isoDate,
-    updatedAt: isoDate,
-  }).strict(),
-  planning: z.object({
-    id: uuid,
-    householdId: uuid,
-    startedByMemberId: uuid,
-    threadId: z.string().nullable(),
-    runId: z.string().nullable(),
-    status: z.enum(["pending", "running", "paused", "completed", "failed", "cancelled"]),
-    startedAt: isoDate.nullable(),
-    pausedAt: isoDate.nullable(),
-    completedAt: isoDate.nullable(),
-  }).strict(),
-  mealPlan: z.object({
-    id: uuid,
-    householdId: uuid,
-    planningRunId: uuid.nullable(),
-    createdByMemberId: uuid,
-    name: z.string().nullable(),
-    notes: z.string().nullable(),
-    status: z.enum(["draft", "active", "completed", "cancelled"]),
-    items: z.array(z.object({
-      id: uuid,
-      householdId: uuid,
-      mealPlanId: uuid,
-      intentId: uuid.nullable(),
-      type: z.enum(["breakfast", "lunch", "dinner", "snack", "dessert", "other"]),
-      title: z.string().min(1),
-      notes: z.string().nullable(),
-      servings: z.number().int().positive(),
-      plannedFor: isoDate,
-    }).strict()),
-    createdAt: isoDate,
-    updatedAt: isoDate,
-  }).strict(),
-  proposal: z.object({ id: uuid }).passthrough().nullable(),
-  classification: z.object({
-    type: z.enum(["meal_planning", "shopping", "feedback", "other"]),
-    summary: z.string().min(1),
-    confidence: z.number().min(0).max(1),
-  }).strict().nullable(),
-  response: z.object({ type: z.string().min(1), message: z.string().min(1) }).strict(),
+  capabilities: z.array(z.string().min(1)),
 }).strict();
 
-export const planningRunResponseSchema = z.object({
-  run: z.object({
-    id: uuid,
-    householdId: uuid,
-    startedByMemberId: uuid,
-    threadId: z.string().nullable(),
-    runId: z.string().nullable(),
-    status: z.enum(["pending", "running", "paused", "completed", "failed", "cancelled"]),
-    startedAt: isoDate.nullable(),
-    pausedAt: isoDate.nullable(),
-    completedAt: isoDate.nullable(),
-  }),
-});
+export const providerAuthRequestSchema = z.object({ login: z.string().min(1), password: z.string().min(1) }).strict();
+export const userProviderAccountSchema = z.object({
+  id: uuid, providerId: uuid, providerSubject: z.string().nullable(), accountLogin: z.string().nullable(),
+  authMethod: z.literal("mcp"),
+  status: z.enum(["active", "expired", "revoked", "reconnect_required"]), scopes: z.array(z.string()),
+  accessTokenExpiresAt: isoDate.nullable(), refreshTokenExpiresAt: isoDate.nullable(), lastUsedAt: isoDate.nullable(),
+}).strict();
+export const providerConnectionResponseSchema = z.object({ provider: providerSchema, account: userProviderAccountSchema }).strict();
+export const providerAccountsResponseSchema = z.object({ items: z.array(userProviderAccountSchema.extend({ provider: providerSchema })) }).strict();
+
+export const workflowActionSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("provider_action"), requestId: z.string().min(1).max(255).optional(), payload: z.record(z.unknown()).optional() }).strict(),
+  z.object({ type: z.literal("fulfillment_selected"), mode: z.enum(["pickup", "delivery"]) }).strict(),
+  z.object({ type: z.literal("delivery_slot_selected"), scheduledFrom: isoDate, scheduledTo: isoDate }).strict().refine((value) => value.scheduledTo >= value.scheduledFrom, "Delivery slot end must not precede its start"),
+  z.object({ type: z.literal("approve") }).strict(),
+  z.object({ type: z.literal("decline") }).strict(),
+]);
+
+export const createWorkflowSchema = z.object({
+  text: z.string().trim().min(1).max(2_000),
+  providerSlug: z.string().trim().min(1).max(80).regex(/^[a-z0-9-]+$/).optional(),
+  source: z.enum(["text", "audio"]).optional(),
+}).strict();
+
+export const workflowResponseSchema = z.object({ workflow: z.object({ id: uuid }).passthrough() }).strict();
+export const memoryWriteSchema = z.object({ text: z.string().trim().min(1).max(2_000), memberId: uuid.nullable().optional(), source: z.enum(["feedback", "audio", "order", "conversation"]), confirmed: z.boolean().optional() }).strict();
+export const memoryQuerySchema = z.object({ memberId: uuid.optional(), query: z.string().trim().min(1).max(500) }).strict();
+export const audioProcessResponseSchema = z.object({ requestId: z.string().min(1), status: z.literal("accepted"), transcript: z.string().min(1), workflow: z.object({ id: uuid }).passthrough() }).strict();

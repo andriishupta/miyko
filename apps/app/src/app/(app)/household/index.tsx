@@ -46,7 +46,7 @@ export default function HouseholdScreen() {
         <Surface style={styles.householdCard}><View style={[styles.householdMark, { backgroundColor: theme.accent }]}><MiykoText variant="section" color="accentContrast">{household.name.slice(0, 2).toUpperCase()}</MiykoText></View><View style={{ flex: 1, gap: 3 }}><MiykoText variant="section">{household.name}</MiykoText><MiykoText variant="body" color="textSecondary">{members.length} members</MiykoText></View><StatusPill label={household.currentMember.role} tone="accent" /></Surface>
         <View style={{ gap: Spacing.two }}><SectionTitle title="Members" action={`${members.length} people`} /><Surface>{members.map((member, index) => <MemberRow key={member.id} member={member} color={avatarColors[index % avatarColors.length]} />)}</Surface></View>
         {household.currentMember.role === 'owner' && <PrimaryButton label="Invite a member" icon="plus" onPress={() => router.push('/household/invite')} />}
-        <Surface style={styles.permissionCard}><AppIcon name="person" size={20} color={theme.accent} /><View style={{ flex: 1, gap: 4 }}><MiykoText variant="section">Approval permissions</MiykoText><MiykoText variant="body" color="textSecondary">Only the owner can approve a proposal and update the real Silpo basket.</MiykoText></View></Surface>
+        <Surface style={styles.permissionCard}><AppIcon name="person" size={20} color={theme.accent} /><View style={{ flex: 1, gap: 4 }}><MiykoText variant="section">Approval permissions</MiykoText><MiykoText variant="body" color="textSecondary">Only the owner can approve a workflow action before LangGraph calls the provider MCP.</MiykoText></View></Surface>
       </ScreenScroll>
     </>
   );

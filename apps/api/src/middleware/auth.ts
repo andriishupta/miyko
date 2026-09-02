@@ -49,5 +49,3 @@ export const requireRole = (...roles: HouseholdRole[]): MiddlewareHandler => asy
   if (!roles.includes(c.get('requestContext').membership.role)) throw forbidden()
   await next()
 }
-
-export const protectedRoute = [authMiddleware, householdContextMiddleware]

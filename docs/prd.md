@@ -8,15 +8,15 @@
 
 ## 1. Product Summary
 
-MiyKo is a food-planning agent with long-term memory that helps individuals and households decide what to eat, coordinate preferences, create grocery baskets and improve future purchases.
+MiyKo is a food agent with long-term memory that helps individuals and households decide what to eat, coordinate preferences, create grocery baskets and improve future purchases.
 
-Unlike a traditional shopping assistant, MiyKo operates across the complete food cycle:
+Unlike a traditional shopping assistant, MiyKo coordinates the complete food workflow:
 
 ```text
-intent → planning → household approval → purchase → feedback → next purchase
+food event → managed workflow → household approval → provider action → memory update
 ```
 
-Users can record ideas such as “I want carbonara this week,” collaborate with household members and turn an approved plan into a real Silpo basket. MiyKo remembers preferences, previous purchases, portion feedback and recurring habits, then proactively suggests the next purchase when supplies may be running low.
+Users can record food events such as “make carbonara this week,” “dinner for two,” “buy meat” or “shop for two weeks,” collaborate with household members and turn an approved result into a real Silpo basket. Recipes and products come from the LLM and Silpo MCP; MiyKo does not maintain its own recipe or product catalog. MiyKo remembers preferences, previous purchases, portion feedback and recurring habits, then proactively suggests the next purchase when supplies may be running low.
 
 A household may contain one person or multiple family members.
 
@@ -50,7 +50,7 @@ Existing shopping assistants mainly solve the current request. They do not maint
 ### Household roles
 
 - **Owner:** manages the household and connected Silpo account; approves purchases.
-- **Adult member:** adds requests and edits shared plans.
+- **Adult member:** adds requests and edits the shared workflow.
 - **Child profile:** contributes preferences or requests but cannot approve purchases.
 
 A household containing one owner is a fully supported use case.
@@ -71,36 +71,34 @@ MiyKo remembers:
 - products that were insufficient, excessive or unused;
 - feedback from completed shopping cycles.
 
-### Intent inbox
+### Workflow inbox
 
-Users can record future food intentions without immediately creating a basket:
+Users can start a managed workflow from a future food event without immediately changing a provider basket:
 
 - “I want carbonara this week.”
 - “We need breakfasts for three days.”
 - “I want to try ramen.”
 - “Remember to buy fruit next time.”
 
-### Collaborative planning
+### Workflow collaboration
 
 Household members can:
 
-- view active meal and shopping plans;
+- view active food workflows;
 - add requests;
-- suggest products or desserts;
-- comment on proposals;
-- approve, edit or reject items according to their role.
+- request additions, replacements or fulfillment changes;
+- approve or reject provider actions according to their role.
 
 ### Agent-created Silpo basket
 
-MiyKo:
+The managed workflow:
 
 1. retrieves relevant memory;
 2. checks previous Silpo purchases;
-3. estimates portions;
-4. searches actual products through Silpo MCP;
-5. proposes products and replacements;
-6. waits for owner approval;
-7. writes approved products to the Silpo basket.
+3. generates the recipe and resolves actual products through Silpo MCP;
+4. proposes replacements or fulfillment choices;
+5. pauses for household decisions and owner approval;
+6. writes approved changes to the Silpo basket.
 
 ### Food Loop
 
@@ -130,8 +128,8 @@ The system must present this as an estimate, not claim that a product has defini
 2. He connects his Silpo account.
 3. His wife joins through an invitation.
 4. Child profiles are added without independent Silpo accounts.
-5. MiyKo imports up to 100 previous online and offline receipts.
-6. Mem0 extracts long-term preferences and recurring patterns.
+5. LangGraph/Silpo MCP reads the provider history required for the workflow.
+6. Mem0 keeps long-term preferences and recurring patterns.
 
 ### Dinner planning
 
@@ -142,10 +140,10 @@ Andrii writes:
 MiyKo:
 
 1. retrieves household and member memory from Mem0;
-2. checks relevant previous purchases;
-3. estimates the required portions;
-4. searches Silpo products through MCP;
-5. creates a carbonara basket proposal.
+2. asks the managed provider workflow for relevant history and products;
+3. generates the recipe and basket in LangGraph/Silpo MCP;
+4. returns the current provider basket for household review;
+5. pauses before any provider mutation.
 
 ### Household collaboration
 
@@ -157,7 +155,7 @@ A child profile requests:
 
 > I want chips instead of ice cream.
 
-MiyKo updates the proposal and pauses before changing the real basket.
+The managed workflow adds the request and pauses before changing the real basket.
 
 The owner can:
 
@@ -168,7 +166,7 @@ The owner can:
 
 ### Purchase
 
-After owner approval, MiyKo calls the Silpo MCP cart tools and adds the confirmed products to the real basket.
+After owner approval, the resumed LangGraph workflow revalidates the current Silpo MCP state, calls the cart tools and adds the confirmed products to the real provider basket.
 
 ### Learning
 
@@ -185,39 +183,31 @@ Two days later, MiyKo sends:
 
 > You may be close to finishing the products from the previous plan. Should I repeat the basket, use the remaining ingredients or create a new three-day plan?
 
-A new planning workflow begins using updated long-term memory.
+A new managed workflow begins using updated long-term memory.
 
 ## 7. Agent Workflow
 
-The Agent Layer runs in LangGraph Cloud. Planning may finish in one run, while the order workflow checkpoints in the managed platform, pauses for provider or household decisions and resumes until basket and delivery choices are complete. It does not bypass owner approval.
+The Agent Layer runs in LangGraph Cloud. A food event and an order are one managed workflow: LangGraph checkpoints it, pauses for provider or household decisions and resumes until basket and fulfillment choices are complete. It does not bypass owner approval.
 
 ```text
-food request
+food event
   ↓
-classify request
+create deterministic workflow reference
   ↓
-load member memory and local history
+LangGraph loads Mem0 context and uses Silpo MCP
   ↓
-plan meals and portions
-  ↓
-search provider products when connected
-  ↓
-save local meal plan and optional proposal
-  ↓
-create durable order workflow
-  ↓
-provider response / replacement / pickup / delivery choice
+recipe / basket / replacement / fulfillment choice
   ↓
 pause → household decision → resume by thread_id
   ↓
 owner approval
   ↓
-update provider basket → save local order/delivery
+update provider basket or complete order
   ↓
-feedback event → memory update
+feedback → Mem0 update
 ```
 
-LangGraph Cloud assigns each proposal workflow its thread and run IDs and preserves workflow state between requests and restarts; LangSmith Cloud traces the run. PostgreSQL stores those external IDs, the provider name and last status observed when an action runs, alongside the approved business decision and final order. It does not store graph checkpoints. Basket application happens from the approval outbox event, so provider failures use the existing retry policy instead of extending the HTTP request. Background workflow-status synchronization is deferred.
+Each workflow UUID becomes its deterministic LangGraph thread ID; LangGraph Cloud assigns run IDs and preserves workflow state between requests and restarts, while LangSmith Cloud traces the run. PostgreSQL stores only those external IDs, the provider reference, last observed status and approval decisions. Replacement, pickup/delivery, delivery-slot, approval and decline actions resume the thread. Owner approval is the final confirmation. PostgreSQL does not store graph checkpoints, basket items or authoritative order state; background workflow-status synchronization is deferred.
 
 ## 8. Memory Design
 
@@ -230,7 +220,7 @@ Memory scopes:
 ```text
 household_id → shared household memory
 member_id    → personal preferences
-run_id       → specific dinner or shopping session
+workflow_id  → transient context held by LangGraph, not PostgreSQL
 ```
 
 Example memories:
@@ -262,15 +252,18 @@ PostgreSQL remains the source of truth for:
 - invitations;
 - connected Silpo accounts;
 - encrypted OAuth credentials;
-- planning-run metadata;
 - approval status;
-- provider synchronization and outbox events.
+- workflow references, outbox events and audit records.
 
 Mem0 must never be used as the source of truth for permissions, authentication or purchase authorization.
 
+### Projection and cache rule
+
+The API may keep a thin last-observed projection and an optional short-lived cache for provider reads to avoid unnecessary repeated requests. This data is allowed to be stale and must not be treated as the current basket, order or delivery state. Before any provider mutation, the managed workflow reads and validates the current state through Silpo MCP. No product, basket or order cache is stored as a local domain model in PostgreSQL.
+
 ## 9. Silpo MCP Integration
 
-The backend acts as an MCP client for the official Silpo MCP server.
+The managed LangGraph workflow uses the official Silpo MCP server. The MiyKo API only handles provider authentication, encrypted credentials and household binding.
 
 Relevant tools include:
 
@@ -304,7 +297,7 @@ Users authenticate with the MiyKo backend. The backend determines:
 
 ### Silpo authorization
 
-Each connected Silpo account uses the official Silpo OAuth flow.
+Each connected Silpo account uses the provider's supported MCP authentication flow. The MVP uses Silpo login credentials at connection time.
 
 Silpo access and refresh tokens:
 
@@ -324,8 +317,8 @@ Hono API — TypeScript
         ├── authentication
         ├── household management
         ├── invitations and roles
-        ├── sequential Agent Layer
-        ├── provider adapters
+        ├── LangGraph Cloud client and thin projection
+        ├── provider authentication adapters
         └── outbox worker
                  ↓
         ┌────────┼───────────────┐
@@ -337,29 +330,19 @@ Hono API — TypeScript
 
 - **Mobile:** Expo, React Native, TypeScript.
 - **Backend:** Hono, TypeScript.
-- **Agent Layer:** sequential model calls behind an API interface.
-- **Long-term memory:** Mem0 Hobby plan.
+- **Agent Layer:** LangChain/LangGraph Cloud with LangSmith tracing.
+- **Long-term memory:** Mem0 Cloud.
 - **Database:** PostgreSQL.
 - **MCP:** official Model Context Protocol TypeScript client.
 - **Validation:** Zod.
 - **Notifications:** Expo Notifications.
 - **LLM:** tool-calling model selected during implementation.
 
-Requests should be batched where possible. Receipt ingestion should not create a separate memory request for every individual product.
+Requests should be batched where possible. Receipt ingestion should not create a separate memory request for every individual product. If repeated provider reads become expensive, add a bounded cache at the integration boundary with an explicit TTL; it must not replace MCP revalidation before mutations.
 
 ## 12. Notifications and Scheduling
 
-Follow-up notifications are deferred from the core MVP. If enabled later, the backend can store:
-
-```text
-purchase_completed_at
-estimated_duration_days
-next_check_at
-notification_status
-planning_run_id
-```
-
-A scheduled job may trigger the next planning request at `next_check_at`; it is not part of the current critical path.
+Follow-up notifications are deferred from the core MVP. If enabled later, a notification service can start a new managed workflow from a household memory signal; it should not introduce local meal, product or order state.
 
 ## 13. MVP Scope
 
@@ -369,11 +352,9 @@ A scheduled job may trigger the next planning request at `next_check_at`; it is 
 - owner and member roles;
 - household invitation;
 - one connected Silpo account;
-- receipt-history ingestion;
 - Mem0 memory extraction and retrieval;
-- natural-language meal request;
-- real Silpo MCP product search;
-- basket proposal;
+- natural-language food workflow;
+- managed Silpo MCP recipe/product/basket interaction;
 - member item request;
 - owner approve/decline;
 - real Silpo basket update;
@@ -385,7 +366,7 @@ A scheduled job may trigger the next planning request at `next_check_at`; it is 
 - child profile;
 - item replacement;
 - feedback after purchase;
-- intent inbox for future meals.
+- future food-event workflows.
 
 ### Not included
 
@@ -410,7 +391,7 @@ A scheduled job may trigger the next planning request at `next_check_at`; it is 
 
 ### Product metrics
 
-- time from food intent to approved basket;
+- time from food event to approved basket;
 - percentage of proposed items accepted;
 - number of manual basket edits;
 - repeated weekly usage;
@@ -424,9 +405,9 @@ A scheduled job may trigger the next planning request at `next_check_at`; it is 
 | Risk                                     | Mitigation                                                                        |
 | ---------------------------------------- | --------------------------------------------------------------------------------- |
 | Incorrect memory inference               | Show memories as editable and request confirmation for important restrictions     |
-| Stale product availability               | Revalidate products through MCP before cart update                                |
+| Stale product availability or local projection | Treat cached/projection data as informational and revalidate through MCP before cart update |
 | Unauthorized basket changes              | Require owner approval and backend permission checks                              |
-| Sensitive receipt data in cloud services | Minimize payloads, use synthetic demo data and avoid storing OAuth tokens in Mem0 |
+| Sensitive receipt data in cloud services | Minimize payloads and avoid storing provider credentials in Mem0 |
 | Mem0 retrieval limit                     | Batch receipt ingestion and retrieve memory once per major workflow stage         |
 | Workflow becomes too broad               | Demonstrate one strong dinner-to-basket-to-follow-up scenario                     |
 | Notification inference is wrong          | Phrase notifications as questions, not factual inventory claims                   |
@@ -435,12 +416,12 @@ A scheduled job may trigger the next planning request at `next_check_at`; it is 
 
 Mushroom helps users complete a current shopping request.
 
-MiyKo maintains a continuous food-planning relationship:
+MiyKo maintains a continuous household food relationship:
 
 ```text
 Mushroom: request → recommendation → basket
 
-MiyKo: memory → intent → collaboration → approval
+MiyKo: memory → food event → collaboration → approval
        → basket → feedback → proactive next cycle
 ```
 

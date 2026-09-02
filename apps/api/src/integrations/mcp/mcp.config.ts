@@ -6,9 +6,6 @@ export const mcpConfig = {
   toolNames: {
     authenticate: process.env.SILPO_MCP_AUTHENTICATE_TOOL,
     reauthorize: process.env.SILPO_MCP_REAUTHORIZE_TOOL,
-    searchProducts: process.env.SILPO_MCP_SEARCH_PRODUCTS_TOOL,
-    getOrderHistory: process.env.SILPO_MCP_ORDER_HISTORY_TOOL,
-    updateBasket: process.env.SILPO_MCP_UPDATE_BASKET_TOOL,
   },
   requestTimeoutMs: Number(process.env.MCP_TIMEOUT_MS ?? 8_000),
 }

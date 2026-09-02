@@ -33,7 +33,7 @@ export default function InviteMemberScreen() {
     <>
       <Stack.Screen options={{ title: 'Invite member' }} />
       <ScreenScroll bottomInset={insets.bottom + 112}>
-        <View style={{ gap: Spacing.two }}><MiykoText variant="title">Bring your household in.</MiykoText><MiykoText variant="body" color="textSecondary">Invite someone to add meal ideas, preferences and changes to the shared plan.</MiykoText></View>
+        <View style={{ gap: Spacing.two }}><MiykoText variant="title">Bring your household in.</MiykoText><MiykoText variant="body" color="textSecondary">Invite someone to add requests and participate in workflow approvals.</MiykoText></View>
         {invitation ? <Surface><MiykoText variant="section">Invitation created</MiykoText><MiykoText variant="body" color="textSecondary">A member invitation was created for {invitation.invitation.inviteeEmail ?? email}.</MiykoText><SecondaryButton label="Invite another person" onPress={() => { setInvitation(null); setEmail(''); }} /></Surface> : <Surface><Field label="EMAIL" placeholder="maria@example.com" value={email} onChangeText={setEmail} /><MiykoText variant="caption" color="textSecondary">They will join as a household member.</MiykoText>{error && <MiykoText variant="caption" color="danger">{error}</MiykoText>}<PrimaryButton label="Create invitation" onPress={createInvite} loading={loading} /></Surface>}
         <SecondaryButton label="Back to household" onPress={() => router.back()} />
       </ScreenScroll>

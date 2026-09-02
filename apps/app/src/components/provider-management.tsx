@@ -12,10 +12,9 @@ import { useOptionalProviderStatus } from '@/providers/provider-status-context';
 type ProviderManagementProps = {
   allowBind?: boolean;
   onComplete?: () => void;
-  onSkip?: () => void;
 };
 
-export function ProviderManagement({ allowBind = false, onComplete, onSkip }: ProviderManagementProps) {
+export function ProviderManagement({ allowBind = false, onComplete }: ProviderManagementProps) {
   const theme = useTheme();
   const providerStatus = useOptionalProviderStatus();
   const [providers, setProviders] = useState<ApiProvider[]>([]);
@@ -93,13 +92,6 @@ export function ProviderManagement({ allowBind = false, onComplete, onSkip }: Pr
     if (completed) onComplete?.();
   }
 
-  async function syncProvider(provider: ApiProvider) {
-    await runProviderAction(provider, async () => {
-      const response = await api.providers.sync(provider.slug);
-      setMessage(`${response.provider.name} sync requested.`);
-    }, `Could not sync ${provider.name}.`);
-  }
-
   async function disconnectProvider(provider: ApiProvider) {
     await runProviderAction(provider, async () => {
       await api.providers.disconnect(provider.slug);
@@ -132,10 +124,7 @@ export function ProviderManagement({ allowBind = false, onComplete, onSkip }: Pr
               <View style={{ gap: Spacing.two }}>
                 <MiykoText variant="body" color="textSecondary">This provider account is ready to use.</MiykoText>
                 {allowBind && <PrimaryButton label="Use in this household" loading={isBusy} onPress={() => void bindProvider(provider)} icon="cart" />}
-                {!onSkip && <>
-                  <SecondaryButton label="Sync provider" onPress={() => void syncProvider(provider)} />
-                  <SecondaryButton label="Disconnect" onPress={() => void disconnectProvider(provider)} />
-                </>}
+                <SecondaryButton label="Disconnect" onPress={() => void disconnectProvider(provider)} />
               </View>
             ) : (
               <View style={{ gap: Spacing.two }}>
@@ -147,7 +136,6 @@ export function ProviderManagement({ allowBind = false, onComplete, onSkip }: Pr
           </Surface>
         );
       })}
-      {onSkip && <SecondaryButton label="Skip for now" onPress={onSkip} />}
     </View>
   );
 }

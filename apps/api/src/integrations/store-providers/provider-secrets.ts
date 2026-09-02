@@ -64,7 +64,4 @@ export const providerSecretCrypto = {
     }
   },
 
-  rotate(value: ProviderSecret) {
-    return this.put(value)
-  },
 }

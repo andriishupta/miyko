@@ -16,7 +16,7 @@ export default function LoginScreen() {
   const theme = useTheme();
   const { status, session, login, register } = useAuth();
   const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [email, setEmail] = useState('andrii@miyko.local');
+  const [email, setEmail] = useState('owner@miyko.local');
   const [password, setPassword] = useState('demo');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -54,20 +54,20 @@ export default function LoginScreen() {
       <View style={{ gap: Spacing.five }}>
         <MiykoLogo />
         <View style={{ gap: Spacing.two }}>
-          <MiykoText variant="hero">Food planning that remembers.</MiykoText>
+          <MiykoText variant="hero">Food workflows that remember.</MiykoText>
           <MiykoText variant="body" color="textSecondary">One shared space for what your household wants to eat, buy and repeat.</MiykoText>
         </View>
         <Surface>
           <MiykoText variant="section">{mode === 'login' ? 'Sign in to MiyKo' : 'Create your MiyKo account'}</MiykoText>
           <MiykoText variant="body" color="textSecondary">{mode === 'login' ? 'Use your MiyKo account to load the household dashboard.' : 'Create an account first, then choose a household.'}</MiykoText>
           {mode === 'register' && <><Field label="FIRST NAME" placeholder="First name" value={firstName} onChangeText={setFirstName} /><Field label="LAST NAME" placeholder="Last name" value={lastName} onChangeText={setLastName} /></>}
-          <Field label="EMAIL" placeholder="you@example.com" value={email} onChangeText={setEmail} />
+    <Field label="EMAIL" placeholder="you@example.com" value={email} onChangeText={setEmail} />
           <Field label="PASSWORD" placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
           {error && <MiykoText variant="caption" color="danger">{error}</MiykoText>}
           <PrimaryButton label={mode === 'login' ? 'Sign in' : 'Create account'} onPress={handleSubmit} loading={loading} />
         </Surface>
         <SecondaryButton label={mode === 'login' ? 'Create an account' : 'I already have an account'} onPress={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(null); }} />
-        {mode === 'login' && <MiykoText variant="caption" color="textSecondary" style={{ textAlign: 'center' }}>API session · demo account: andrii@miyko.local</MiykoText>}
+        {mode === 'login' && <MiykoText variant="caption" color="textSecondary" style={{ textAlign: 'center' }}>API session · demo account: owner@miyko.local</MiykoText>}
       </View>
     </ScreenScroll>
   );
