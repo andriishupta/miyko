@@ -22,6 +22,18 @@ export type McpOrderRecord = {
   delivery: { externalDeliveryId: string; status: 'pending' | 'scheduled' | 'in_transit' | 'delivered' | 'cancelled' | 'failed'; scheduledFrom: string | null; scheduledTo: string | null } | null
 }
 
+export type McpProduct = {
+  id: string
+  name: string
+  brand: string | null
+  category: string
+  price: number
+  currency: 'UAH'
+  unit: string
+  available: boolean
+  imageUrl: string | null
+}
+
 export interface McpClient {
   discoverTools(): Promise<string[]>
   authenticate(input: ProviderLoginInput): Promise<unknown>

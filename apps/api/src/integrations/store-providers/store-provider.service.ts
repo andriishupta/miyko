@@ -21,7 +21,7 @@ import { db } from '../../lib/database.js'
 import { AppError, notFound, providerCapabilityUnsupported, providerNotConnected, providerReauthorizationRequired } from '../../lib/errors.js'
 import { providerSecretStorage } from './provider-secret.storage.js'
 import { storeProviderRegistry } from './store-provider.registry.js'
-import type { ProviderTokenSet, StoreProvider } from './store-provider.types.js'
+import type { ProviderTokenSet, StoreProvider, StoreProviderProduct } from './store-provider.types.js'
 import { outboxService } from '../../features/outbox/outbox.service.js'
 
 const toProvider = (row: typeof shoppingProviders.$inferSelect): Provider => ({
@@ -142,6 +142,26 @@ export class StoreProviderService {
   async getOrders(context: RequestContext, providerSlug: string): Promise<ProviderOrdersResponse> {
     const result = await this.withAccount(context, providerSlug, 'orders.history', (provider, token) => provider.getOrders({ householdId: context.household.id, accessToken: token.accessToken }))
     return { provider: result.provider, items: result.value }
+  }
+
+  async searchProducts(context: RequestContext, providerSlug: string, query: string, limit = 10): Promise<StoreProviderProduct[]> {
+    const result = await this.withAccount(context, providerSlug, 'products.search', (provider, token) => provider.searchProducts({ householdId: context.household.id, accessToken: token.accessToken }, { query, limit }))
+    return result.value
+  }
+
+  async activeProvider(context: RequestContext): Promise<{ id: string; slug: string }> {
+    const provider = await this.findActiveProvider(context)
+    if (!provider) throw providerNotConnected()
+    return provider
+  }
+
+  async findActiveProvider(context: RequestContext): Promise<{ id: string; slug: string } | null> {
+    const connections = await db.query.connectedProviderAccounts.findMany({
+      where: and(eq(connectedProviderAccounts.householdId, context.household.id), eq(connectedProviderAccounts.status, 'active')),
+      with: { provider: true, userProviderAccount: true },
+    })
+    const connection = connections.find((item) => item.provider?.kind === 'store' && item.userProviderAccount?.userId === context.user.id && item.userProviderAccount.status === 'active')
+    return connection?.provider ? { id: connection.provider.id, slug: connection.provider.slug } : null
   }
 
   async syncStatus(context: RequestContext, providerSlug: string): Promise<ProviderSyncStatusResponse> {

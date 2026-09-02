@@ -1,11 +1,10 @@
 import { z } from 'zod'
 import { AppError } from '../../lib/errors.js'
 import { requireAgentConfig } from './agent.config.js'
+import type { AgentMessage, AgentModel } from './agent.port.js'
 
-type Message = { role: 'system' | 'user' | 'assistant'; content: string }
-
-export const openAiClient = {
-  async json<T>(messages: Message[], schema: z.ZodType<T>): Promise<T> {
+export const openAiClient: AgentModel = {
+  async json<T>(messages: AgentMessage[], schema: z.ZodType<T>): Promise<T> {
     const config = requireAgentConfig()
     const response = await fetch(config.endpoint, {
       method: 'POST',

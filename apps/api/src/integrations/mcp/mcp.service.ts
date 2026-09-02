@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { AppError } from '../../lib/errors.js'
 import { mcpConfig } from './mcp.config.js'
 import { sdkMcpClient } from './mcp.sdk.client.js'
-import type { McpClient, McpOrderRecord, ProductSearchInput, ProviderLoginInput } from './mcp.client.js'
+import type { McpClient, McpOrderRecord, McpProduct, ProductSearchInput, ProviderLoginInput } from './mcp.client.js'
 
 const productSchema = z.object({
   id: z.string().min(1), name: z.string().min(1), brand: z.string().nullable(), category: z.string().min(1), price: z.number().nonnegative(), currency: z.literal('UAH'), unit: z.string().min(1), available: z.boolean(), imageUrl: z.string().url().nullable(),
@@ -79,7 +79,7 @@ export class McpService {
     return parseExternal(providerAuthResultSchema, await withTimeout('provider/reauthorize', () => this.client.reauthorize(checkedInput)))
   }
 
-  async searchProducts(input: ProductSearchInput) {
+  async searchProducts(input: ProductSearchInput): Promise<McpProduct[]> {
     const checkedInput = parseExternal(productSearchInputSchema, input)
     return parseExternal(collectionSchema(productSchema), await readWithRetry('products/search', () => this.client.searchProducts(checkedInput)))
   }

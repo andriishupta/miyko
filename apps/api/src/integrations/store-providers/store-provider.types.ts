@@ -33,6 +33,18 @@ export type StoreProviderOrderRecord = {
   delivery: { externalDeliveryId: string; status: 'pending' | 'scheduled' | 'in_transit' | 'delivered' | 'cancelled' | 'failed'; scheduledFrom: string | null; scheduledTo: string | null } | null
 }
 
+export type StoreProviderProduct = {
+  providerProductId: string
+  name: string
+  brand: string | null
+  category: string | null
+  price: number | null
+  currency: 'UAH'
+  unit: string
+  available: boolean | null
+  imageUrl: string | null
+}
+
 export interface StoreProvider {
   name: string
   get(): StoreProviderDefinition
@@ -41,5 +53,6 @@ export interface StoreProvider {
   reauthorize(input: { refreshToken: string }): Promise<ProviderTokenSet>
   getOrders(context: ProviderRequestContext): Promise<ProviderOrder[]>
   getOrderRecords(context: ProviderRequestContext): Promise<StoreProviderOrderRecord[]>
+  searchProducts(context: ProviderRequestContext, input: { query: string; limit: number }): Promise<StoreProviderProduct[]>
   updateBasket(context: BasketUpdateContext): Promise<BasketUpdateResponse>
 }

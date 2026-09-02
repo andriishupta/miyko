@@ -544,7 +544,22 @@ export type AudioProcessResponse = {
   response: { type: string; message: string };
   foodIntentId: UUID | null;
   planningRunId: UUID;
+  mealPlanId: UUID;
+  proposalId: UUID | null;
   audioStored: boolean;
+};
+
+export type IntentProcessResponse = {
+  intent: FoodIntent;
+  planning: PlanningRun;
+  mealPlan: MealPlan;
+  proposal: ShoppingProposal | null;
+  classification: {
+    type: "meal_planning" | "shopping" | "feedback" | "other";
+    summary: string;
+    confidence: number;
+  } | null;
+  response: { type: string; message: string };
 };
 
 export type PlanningRunResponse = {
@@ -653,6 +668,7 @@ export {
   audioAgentResponseSchema,
   audioProcessResponseSchema,
   audioTranscriptionSchema,
+  intentProcessResponseSchema,
   memoryInitializationStatusResponseSchema,
   outboxEventPayloadSchema,
   planningRunResponseSchema,

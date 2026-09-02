@@ -28,6 +28,7 @@ No `MCP_MODE` is supported. MCP uses the official SDK transport, `tools/list`, a
 - Authenticated bootstrap: `GET /auth/session`, `POST /auth/logout`, `POST /onboarding/households` and `POST /invitations/:id/accept`.
 - Provider account: `GET /providers`, `GET /providers/accounts`, `GET /providers/:providerSlug/tools`, `POST /providers/:providerSlug/connect`, `POST /providers/:providerSlug/reauthorize`, `DELETE /providers/:providerSlug`.
 - Household provider: `POST /providers/:providerSlug/bind`, `POST /providers/:providerSlug/sync`, `GET /providers/:providerSlug/sync-status`, `GET /providers/:providerSlug/orders`.
+- Agent flow: `POST /intents`, `POST /planning` and `GET /planning/:planningRunId`. Meal planning works without a connected provider; provider product search and shopping proposals require one.
 - Household resources: dashboard, products, household, orders/proposals, deliveries, audio and memory routes. They require a valid session, `X-Household-Id`, active membership and role authorization. Settings are local UI preferences in the MVP and have no API endpoint.
 
 Provider capabilities are operation names such as `products.search`, `products.replacements`, `receipts.read`, `orders.history`, `basket.update` and `deliveries.read`. Unsupported capabilities return `PROVIDER_CAPABILITY_UNSUPPORTED`. Provider access/refresh tokens are encrypted ciphertext in server-side storage, never returned to the client or written to logs. Reauthorization refreshes or replaces credentials; disconnect revokes the account and removes stored references.

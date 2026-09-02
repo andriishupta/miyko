@@ -263,7 +263,7 @@ The current codebase is a scaffold with several real boundaries already wired:
 ### API
 
 - `apps/api/src/app.ts` applies shared security/request middleware, exposes `/health`, mounts auth routes and protects the feature API.
-- Feature directories exist for auth, dashboard, products, households, providers, orders, deliveries, audio, memory and outbox.
+- Feature directories exist for auth, dashboard, products, households, providers, intents, planning, orders, deliveries, audio, memory and outbox.
 - Hono secure headers, CORS, body limits, request context, logging, authentication, household context, validation and rate limiting are present.
 - Authentication uses email/password plus opaque bearer sessions.
 - Most feature services use the server-side Drizzle client and PostgreSQL records.
@@ -304,7 +304,7 @@ The current codebase is a scaffold with several real boundaries already wired:
 - [x] Discover the real Silpo MCP tools through `tools/list` before provider-specific calls.
 - [x] Connect native audio recording in the app to the protected audio API route.
 - [x] Add the missing proposal/order UI needed to demonstrate owner review and approval from the mobile app.
-- [ ] Mount the text-intent and planning routes used by the app and connect them to the Agent Layer workflow.
+- [x] Mount the text-intent and planning routes used by the app and connect them to the Agent Layer workflow.
 - [ ] Connect the Agent Layer boundary to LangSmith Deployment/Agent Server if managed persistence and task execution are selected for deployment.
 - [ ] Add notifications and accelerated follow-up scheduling for the demo.
 
@@ -312,7 +312,6 @@ The current codebase is a scaffold with several real boundaries already wired:
 
 1. Apply the existing database migrations and configure the API-only environment.
 2. Discover the deployed Silpo MCP tool names and set the API tool mapping variables.
-3. Mount the text-intent and planning routes used by the mobile app.
-4. Keep LangGraph behind the Agent Layer interface; use LangSmith Deployment/Agent Server when managed persistence and task execution are selected, while keeping product `planning_runs` as the business audit record and adding no checkpoint tables to MiyKo PostgreSQL.
-5. Add notification scheduling when it becomes part of the MVP flow.
-6. Finish owner-run manual verification of tenancy, provider reconnect and basket approval boundaries.
+3. Keep LangGraph behind the Agent Layer interface; use LangSmith Deployment/Agent Server when managed persistence and task execution are selected, while keeping product `planning_runs` as the business audit record and adding no checkpoint tables to MiyKo PostgreSQL.
+4. Add notification scheduling when it becomes part of the MVP flow.
+5. Finish owner-run manual verification of tenancy, provider reconnect and basket approval boundaries.

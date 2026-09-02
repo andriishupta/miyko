@@ -16,6 +16,8 @@ import { deliveriesRoutes } from './features/deliveries/deliveries.routes.js'
 import { audioRoutes } from './features/audio/audio.routes.js'
 import { memoryRoutes } from './features/memory/memory.routes.js'
 import { householdProviderRoutes, providersRoutes } from './features/providers/providers.routes.js'
+import { intentsRoutes } from './features/intents/intents.routes.js'
+import { planningRoutes } from './features/planning/planning.routes.js'
 
 const protectedApi = new Hono()
 protectedApi.use('*', authMiddleware)
@@ -28,6 +30,8 @@ protectedApi.route('/deliveries', deliveriesRoutes)
 protectedApi.route('/audio', audioRoutes)
 protectedApi.route('/memory', memoryRoutes)
 protectedApi.route('/providers', householdProviderRoutes)
+protectedApi.route('/intents', intentsRoutes)
+protectedApi.route('/planning', planningRoutes)
 
 export const app = new Hono()
 applySecurityMiddleware(app)

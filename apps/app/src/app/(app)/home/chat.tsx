@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -6,13 +6,14 @@ import { ActivityIndicator, TextInput } from 'react-native-paper';
 
 import { api, ApiError } from '@/api/client';
 import type { ApiIntentProcessResponse } from '@/api/types';
-import { AppIcon, IconButton, MiykoText, ScreenScroll, StatusPill, Surface } from '@/components/miyko-ui';
+import { AppIcon, IconButton, MiykoText, ScreenScroll, SecondaryButton, StatusPill, Surface } from '@/components/miyko-ui';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function ChatScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const [message, setMessage] = useState('');
   const [submittedMessage, setSubmittedMessage] = useState<string | null>(null);
   const [result, setResult] = useState<ApiIntentProcessResponse | null>(null);
@@ -45,7 +46,7 @@ export default function ChatScreen() {
         {submittedMessage && <Surface style={[styles.messageBubble, { alignSelf: 'flex-end', backgroundColor: theme.accentSoft }]}><MiykoText variant="caption" color="accent">You</MiykoText><MiykoText variant="body">{submittedMessage}</MiykoText></Surface>}
         {loading && <Surface style={styles.response}><ActivityIndicator color={theme.accent} /><MiykoText variant="body" color="textSecondary">Sending the intention to the Agent Layer…</MiykoText></Surface>}
         {error && <Surface style={styles.response}><StatusPill label="API unavailable" tone="warning" /><MiykoText variant="body" color="danger">{error}</MiykoText></Surface>}
-        {result && <Surface style={styles.response}><View style={styles.responseHeader}><MiykoText variant="section">Agent result</MiykoText><StatusPill label="Processed" tone="success" /></View>{result.intent && <MiykoText variant="body">{result.intent.text}</MiykoText>}{result.response?.message && <MiykoText variant="body" color="textSecondary">{result.response.message}</MiykoText>}{result.planning && <MiykoText variant="caption" color="textSecondary">Planning run: {result.planning.status}</MiykoText>}{result.proposal && <MiykoText variant="caption" color="textSecondary">Proposal ready for review.</MiykoText>}</Surface>}
+        {result && <Surface style={styles.response}><View style={styles.responseHeader}><MiykoText variant="section">Agent result</MiykoText><StatusPill label="Processed" tone="success" /></View>{result.intent && <MiykoText variant="body">{result.intent.text}</MiykoText>}{result.classification && <MiykoText variant="caption" color="textSecondary">{result.classification.type} · {Math.round(result.classification.confidence * 100)}% confidence</MiykoText>}<MiykoText variant="body" color="textSecondary">{result.response.message}</MiykoText><MiykoText variant="caption" color="textSecondary">Planning run: {result.planning.status}</MiykoText>{result.proposal && <SecondaryButton label="Review proposal" icon="cart" onPress={() => router.push(`/home/proposals/${result.proposal.id}`)} />}</Surface>}
         <View style={styles.composer}><TextInput mode="outlined" value={message} onChangeText={setMessage} placeholder="Write a food intention…" textColor={theme.text} outlineColor={theme.border} activeOutlineColor={theme.accent} contentStyle={styles.inputContent} outlineStyle={styles.inputOutline} style={styles.input} /><IconButton name="arrow" label="Send message" onPress={() => void sendMessage()} /></View>
       </ScreenScroll>
     </>

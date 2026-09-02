@@ -122,8 +122,65 @@ export const audioProcessResponseSchema = z.object({
   response: z.object({ type: z.string().min(1), message: z.string().min(1) }).strict(),
   foodIntentId: uuid.nullable(),
   planningRunId: uuid,
+  mealPlanId: uuid,
+  proposalId: uuid.nullable(),
   audioStored: z.boolean(),
 });
+
+export const intentProcessResponseSchema = z.object({
+  intent: z.object({
+    id: uuid,
+    householdId: uuid,
+    submittedByMemberId: uuid,
+    text: z.string().min(1),
+    status: z.enum(["active", "planned", "completed", "cancelled"]),
+    desiredDate: isoDate.nullable(),
+    desiredDateEnd: isoDate.nullable(),
+    source: z.enum(["text", "audio"]),
+    createdAt: isoDate,
+    updatedAt: isoDate,
+  }).strict(),
+  planning: z.object({
+    id: uuid,
+    householdId: uuid,
+    startedByMemberId: uuid,
+    langgraphThreadId: z.string().nullable(),
+    langgraphRunId: z.string().nullable(),
+    status: z.enum(["pending", "running", "paused", "completed", "failed", "cancelled"]),
+    startedAt: isoDate.nullable(),
+    pausedAt: isoDate.nullable(),
+    completedAt: isoDate.nullable(),
+  }).strict(),
+  mealPlan: z.object({
+    id: uuid,
+    householdId: uuid,
+    planningRunId: uuid.nullable(),
+    createdByMemberId: uuid,
+    name: z.string().nullable(),
+    notes: z.string().nullable(),
+    status: z.enum(["draft", "active", "completed", "cancelled"]),
+    items: z.array(z.object({
+      id: uuid,
+      householdId: uuid,
+      mealPlanId: uuid,
+      intentId: uuid.nullable(),
+      type: z.enum(["breakfast", "lunch", "dinner", "snack", "dessert", "other"]),
+      title: z.string().min(1),
+      notes: z.string().nullable(),
+      servings: z.number().int().positive(),
+      plannedFor: isoDate,
+    }).strict()),
+    createdAt: isoDate,
+    updatedAt: isoDate,
+  }).strict(),
+  proposal: z.object({ id: uuid }).passthrough().nullable(),
+  classification: z.object({
+    type: z.enum(["meal_planning", "shopping", "feedback", "other"]),
+    summary: z.string().min(1),
+    confidence: z.number().min(0).max(1),
+  }).strict().nullable(),
+  response: z.object({ type: z.string().min(1), message: z.string().min(1) }).strict(),
+}).strict();
 
 export const planningRunResponseSchema = z.object({
   run: z.object({

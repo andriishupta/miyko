@@ -1,3 +1,11 @@
+import type { ZodType } from 'zod'
+
+export type AgentMessage = { role: 'system' | 'user' | 'assistant'; content: string }
+
+export interface AgentModel {
+  json<T>(messages: AgentMessage[], schema: ZodType<T>): Promise<T>
+}
+
 export type MemoryInitializationInput = {
   namespace: string
   receipts: unknown[]
@@ -15,7 +23,7 @@ export type FoodIntentInput = {
   text: string
   namespace: string
   providerHistory: unknown[]
-  searchProducts: (query: string) => Promise<unknown[]>
+  searchProducts: ((query: string) => Promise<unknown[]>) | null
 }
 
 export type FoodIntentResult = {

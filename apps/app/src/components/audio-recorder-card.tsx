@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
+import { useRouter } from 'expo-router';
 import { File } from 'expo-file-system';
 import { ActivityIndicator, FAB } from 'react-native-paper';
 import { StyleSheet, View } from 'react-native';
 
 import { api, ApiError } from '@/api/client';
 import type { ApiAudioProcessResponse } from '@/api/types';
-import { AppIcon, MiykoText, StatusPill, Surface } from '@/components/miyko-ui';
+import { AppIcon, MiykoText, SecondaryButton, StatusPill, Surface } from '@/components/miyko-ui';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export function AudioRecorderCard() {
   const theme = useTheme();
+  const router = useRouter();
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
   const [permissionGranted, setPermissionGranted] = useState(false);
@@ -76,7 +78,7 @@ export function AudioRecorderCard() {
       <MiykoText variant="caption" color="textSecondary" style={styles.center}>{recorderState.isRecording ? `${Math.round(recorderState.durationMillis / 1000)}s · Tap to stop` : uploading ? 'Sending the recording to the protected API…' : 'Your recording is sent as base64 to the API.'}</MiykoText>
       {uploading && <ActivityIndicator color={theme.accent} />}
       {error && <MiykoText variant="caption" color="danger">{error}</MiykoText>}
-      {result && <Surface style={styles.result}><View style={styles.resultHeader}><MiykoText variant="section">Agent result</MiykoText><StatusPill label="Processed" tone="success" /></View>{result.transcript && <View style={styles.resultPart}><MiykoText variant="caption" color="textSecondary">TRANSCRIPT</MiykoText><MiykoText variant="body">{result.transcript}</MiykoText></View>}{result.intent && <View style={styles.resultPart}><MiykoText variant="caption" color="textSecondary">INTENT</MiykoText><MiykoText variant="body">{result.intent.type} · {result.intent.summary}</MiykoText><MiykoText variant="caption" color="textSecondary">Confidence {Math.round(result.intent.confidence * 100)}%</MiykoText></View>}{result.response && <View style={styles.resultPart}><MiykoText variant="caption" color="textSecondary">RESPONSE</MiykoText><MiykoText variant="body">{result.response.message}</MiykoText></View>}</Surface>}
+      {result && <Surface style={styles.result}><View style={styles.resultHeader}><MiykoText variant="section">Agent result</MiykoText><StatusPill label="Processed" tone="success" /></View>{result.transcript && <View style={styles.resultPart}><MiykoText variant="caption" color="textSecondary">TRANSCRIPT</MiykoText><MiykoText variant="body">{result.transcript}</MiykoText></View>}{result.intent && <View style={styles.resultPart}><MiykoText variant="caption" color="textSecondary">INTENT</MiykoText><MiykoText variant="body">{result.intent.type} · {result.intent.summary}</MiykoText><MiykoText variant="caption" color="textSecondary">Confidence {Math.round(result.intent.confidence * 100)}%</MiykoText></View>}{result.response && <View style={styles.resultPart}><MiykoText variant="caption" color="textSecondary">RESPONSE</MiykoText><MiykoText variant="body">{result.response.message}</MiykoText></View>}{result.proposalId && <SecondaryButton label="Review proposal" icon="cart" onPress={() => router.push(`/home/proposals/${result.proposalId}`)} />}</Surface>}
     </View>
   );
 }

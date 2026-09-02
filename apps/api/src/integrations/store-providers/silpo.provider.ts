@@ -1,6 +1,6 @@
 import type { BasketUpdateResponse, ProviderAuthRequest, ProviderOrder } from '@miyko/contracts'
 import { mcpService } from '../mcp/mcp.service.js'
-import type { StoreProvider, ProviderTokenSet, ProviderRequestContext, BasketUpdateContext, StoreProviderOrderRecord } from './store-provider.types.js'
+import type { StoreProvider, ProviderTokenSet, ProviderRequestContext, BasketUpdateContext, StoreProviderOrderRecord, StoreProviderProduct } from './store-provider.types.js'
 
 const definition = {
   name: 'Silpo',
@@ -44,6 +44,21 @@ export const createSilpoProvider = (): StoreProvider => ({
 
   async getOrders(context: ProviderRequestContext): Promise<ProviderOrder[]> {
     return (await this.getOrderRecords(context)).map((record) => record.order)
+  },
+
+  async searchProducts(context: ProviderRequestContext, input: { query: string; limit: number }): Promise<StoreProviderProduct[]> {
+    const products = await mcpService.searchProducts({ query: input.query, limit: input.limit, accessToken: context.accessToken })
+    return products.map((product) => ({
+      providerProductId: product.id,
+      name: product.name,
+      brand: product.brand,
+      category: product.category,
+      price: product.price,
+      currency: product.currency,
+      unit: product.unit,
+      available: product.available,
+      imageUrl: product.imageUrl,
+    }))
   },
 
   async updateBasket(context: BasketUpdateContext): Promise<BasketUpdateResponse> {

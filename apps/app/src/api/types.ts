@@ -8,16 +8,16 @@ import type {
   HouseholdMember,
   HouseholdRole,
   HouseholdSummary,
+  IntentProcessResponse,
   InvitationCreateResponse,
   LoginResponse,
   MemoryInitializationStatusResponse,
+  PlanningRunResponse,
   Product,
   ProductReplacementsResponse,
   ProductResponse,
   ProductSearchResponse,
   Order,
-  FoodIntent,
-  PlanningRun,
   ShoppingProposal,
   Provider,
   ProviderAccountsResponse,
@@ -63,16 +63,10 @@ export type ApiProviderOrdersResponse = ProviderOrdersResponse;
 
 export type ApiAudioProcessResponse = AudioProcessResponse;
 
-/** Temporary app boundary for the planned intent endpoint. */
-export type ApiIntentProcessResponse = {
-  intent: FoodIntent;
-  planning?: PlanningRun | null;
-  proposal?: ApiOrderProposal | null;
-  response?: { type: string; message: string } | null;
-};
+export type ApiIntentProcessResponse = IntentProcessResponse;
 
 export type ApiMemoryInitializationStatus = MemoryInitializationStatusResponse;
 
 export type ApiProviderSyncResponse = ProviderSyncResponse;
 
-export type ApiPlanningRunResponse = PlanningRun;
+export type ApiPlanningRunResponse = PlanningRunResponse;
