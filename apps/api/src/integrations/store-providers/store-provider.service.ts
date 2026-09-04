@@ -5,7 +5,6 @@ import {
   userProviderAccounts,
 } from '@miyko/database/schema'
 import type {
-  AuthUser,
   Provider,
   ProviderAccountsResponse,
   ProviderAuthRequest,
@@ -46,9 +45,21 @@ export class StoreProviderService {
     return rows.map(toProvider)
   }
 
-  async listAccounts(user: AuthUser): Promise<ProviderAccountsResponse> {
-    const rows = await db.query.userProviderAccounts.findMany({ where: eq(userProviderAccounts.userId, user.id), with: { provider: true } })
-    return { items: rows.map((row) => ({ ...toAccount(row), provider: toProvider(row.provider) })) }
+  async listAccounts(context: RequestContext): Promise<ProviderAccountsResponse> {
+    const rows = await db.query.connectedProviderAccounts.findMany({
+      where: eq(connectedProviderAccounts.householdId, context.household.id),
+      with: { provider: true },
+    })
+    return {
+      items: rows.flatMap((row) => row.provider ? [{
+        id: row.id,
+        providerId: row.providerId,
+        accountLogin: null,
+        status: row.status,
+        connectedByMemberId: row.authorizedByMemberId,
+        provider: toProvider(row.provider),
+      }] : []),
+    }
   }
 
   async discoverTools(providerSlug: string) {
@@ -56,77 +67,77 @@ export class StoreProviderService {
     return provider.discoverTools()
   }
 
-  async connect(user: AuthUser, providerSlug: string, input: ProviderAuthRequest): Promise<ProviderConnectionResponse> {
+  async connect(context: RequestContext, providerSlug: string, input: ProviderAuthRequest): Promise<ProviderConnectionResponse> {
     const { providerRow, provider } = await this.resolve(providerSlug)
     const tokenSet = await provider.authenticate(input)
     const previous = tokenSet.providerSubject
-      ? await this.findAccountBySubject(user.id, providerRow.id, tokenSet.providerSubject)
-      : await this.findAccount(user.id, providerRow.id)
-    const account = await this.saveTokenSet(user.id, providerRow.id, tokenSet, previous?.id, previous)
+      ? await this.findAccountBySubject(context.user.id, providerRow.id, tokenSet.providerSubject)
+      : await this.findAccount(context.user.id, providerRow.id)
+    const account = await this.saveTokenSet(context.user.id, providerRow.id, tokenSet, previous?.id, previous)
+    await this.bindAccount(context, providerRow.id, account.id)
     return { provider: toProvider(providerRow), account: toAccount(account) }
   }
 
-  async reauthorize(user: AuthUser, providerSlug: string, input: Partial<ProviderAuthRequest>): Promise<ProviderConnectionResponse> {
+  async reauthorize(context: RequestContext, providerSlug: string, input: Partial<ProviderAuthRequest>): Promise<ProviderConnectionResponse> {
     const { providerRow, provider } = await this.resolve(providerSlug)
-    const account = await this.findAccount(user.id, providerRow.id)
+    const account = await this.findAccount(context.user.id, providerRow.id)
     if (!account) throw providerNotConnected()
 
     const tokenSet = input.login && input.password
       ? await provider.authenticate(input as ProviderAuthRequest)
       : await this.refresh(provider, account)
-    const updated = await this.saveTokenSet(user.id, providerRow.id, tokenSet, account.id, account)
+    const updated = await this.saveTokenSet(context.user.id, providerRow.id, tokenSet, account.id, account)
+    await this.bindAccount(context, providerRow.id, updated.id)
     return { provider: toProvider(providerRow), account: toAccount(updated) }
   }
 
-  async disconnect(user: AuthUser, providerSlug: string) {
+  async disconnect(context: RequestContext, providerSlug: string) {
     const { providerRow } = await this.resolve(providerSlug)
-    const account = await this.findAccount(user.id, providerRow.id)
-    if (!account) throw providerNotConnected()
-    const now = new Date()
-    await db.transaction(async (tx) => {
-      await tx.update(userProviderAccounts).set({ status: 'revoked', updatedAt: now }).where(and(eq(userProviderAccounts.id, account.id), eq(userProviderAccounts.userId, user.id)))
-      await tx.update(connectedProviderAccounts).set({ status: 'revoked', revokedAt: now, updatedAt: now }).where(eq(connectedProviderAccounts.userProviderAccountId, account.id))
+    const connection = await db.query.connectedProviderAccounts.findFirst({
+      where: and(
+        eq(connectedProviderAccounts.householdId, context.household.id),
+        eq(connectedProviderAccounts.providerId, providerRow.id),
+      ),
     })
-    await providerSecretStorage.revoke(account.id)
+    if (!connection) throw providerNotConnected()
+    const now = new Date()
+    await db.update(connectedProviderAccounts)
+      .set({ status: 'revoked', revokedAt: now, updatedAt: now })
+      .where(and(eq(connectedProviderAccounts.id, connection.id), eq(connectedProviderAccounts.householdId, context.household.id)))
     return { disconnected: true }
   }
 
-  async bindToHousehold(userId: string, householdId: string, memberId: string) {
-    const accounts = await db.query.userProviderAccounts.findMany({ where: and(eq(userProviderAccounts.userId, userId), eq(userProviderAccounts.status, 'active')) })
-    for (const account of accounts) {
-      if (!(await providerSecretStorage.load(account.id))) continue
-      const provider = await db.query.providers.findFirst({ where: eq(providers.id, account.providerId) })
-      if (!provider) continue
-      const existing = await db.query.connectedProviderAccounts.findFirst({
-        where: and(
-          eq(connectedProviderAccounts.householdId, householdId),
-          eq(connectedProviderAccounts.providerId, account.providerId),
-          eq(connectedProviderAccounts.authorizedByMemberId, memberId),
-        ),
-      })
-      if (existing) {
-        await db.update(connectedProviderAccounts).set({ userProviderAccountId: account.id, status: 'active', revokedAt: null, updatedAt: new Date() }).where(eq(connectedProviderAccounts.id, existing.id))
-      } else {
-        await db.insert(connectedProviderAccounts).values({ householdId, providerId: account.providerId, userProviderAccountId: account.id, authorizedByMemberId: memberId, status: 'active' })
-      }
+  private async bindAccount(context: RequestContext, providerId: string, accountId: string) {
+    const existing = await db.query.connectedProviderAccounts.findFirst({
+      where: and(
+        eq(connectedProviderAccounts.householdId, context.household.id),
+        eq(connectedProviderAccounts.providerId, providerId),
+      ),
+    })
+    const values = {
+      userProviderAccountId: accountId,
+      authorizedByMemberId: context.membership.id,
+      status: 'active' as const,
+      revokedAt: null,
+      updatedAt: new Date(),
     }
-  }
-
-  async bindAccountToHousehold(context: RequestContext, providerSlug: string): Promise<ProviderConnectionResponse> {
-    const { providerRow } = await this.resolve(providerSlug)
-    const account = await this.findAccount(context.user.id, providerRow.id)
-    if (!account || account.status !== 'active') throw providerNotConnected()
-    if (!(await providerSecretStorage.load(account.id))) throw providerReauthorizationRequired()
-    await this.bindToHousehold(context.user.id, context.household.id, context.membership.id)
-    return { provider: toProvider(providerRow), account: toAccount(account) }
+    if (existing) {
+      await db.update(connectedProviderAccounts).set(values).where(eq(connectedProviderAccounts.id, existing.id))
+      return
+    }
+    await db.insert(connectedProviderAccounts).values({
+      householdId: context.household.id,
+      providerId,
+      ...values,
+    })
   }
 
   async findActiveProvider(context: RequestContext, providerSlug?: string): Promise<{ id: string; slug: string }> {
     const connections = await db.query.connectedProviderAccounts.findMany({
       where: and(eq(connectedProviderAccounts.householdId, context.household.id), eq(connectedProviderAccounts.status, 'active')),
-      with: { provider: true, userProviderAccount: true },
+      with: { provider: true },
     })
-    const connection = connections.find((item) => (!providerSlug || item.provider?.slug === providerSlug) && item.provider?.status === 'active' && item.userProviderAccount?.status === 'active' && item.userProviderAccount.userId === context.user.id)
+    const connection = connections.find((item) => (!providerSlug || item.provider?.slug === providerSlug) && item.provider?.status === 'active')
     if (!connection?.provider) throw providerNotConnected()
     return { id: connection.provider.id, slug: connection.provider.slug }
   }
@@ -165,7 +176,8 @@ export class StoreProviderService {
       return rows[0]
     }
     const rows = await db.insert(userProviderAccounts).values({ userId, providerId, ...accountValues }).returning()
-    if (rows[0]) await providerSecretStorage.save(rows[0].id, { accessToken: tokenSet.accessToken, refreshToken: tokenSet.refreshToken })
+    if (!rows[0]) throw providerNotConnected()
+    await providerSecretStorage.save(rows[0].id, { accessToken: tokenSet.accessToken, refreshToken: tokenSet.refreshToken })
     return rows[0]
   }
 

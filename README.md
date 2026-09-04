@@ -5,7 +5,7 @@ MiyKo is a mobile household food agent. A text or audio request starts a long-ru
 ## Core loop
 
 ```text
-login/register → create or join household → connect/bind Silpo
+login/register → create or join household → household owner connects Silpo once
   → create workflow → LangGraph + Mem0 + Silpo MCP
   → graph pauses for decisions → owner approves/declines
   → same workflow resumes → MCP updates basket or completes order

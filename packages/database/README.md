@@ -5,7 +5,7 @@ Server-only Drizzle schema for MiyKo. The Expo app must never receive `DATABASE_
 The database is a control-plane store, not a domain store. It contains:
 
 - users, sessions, households, members and invitations;
-- generic providers, encrypted provider secrets and household bindings;
+- generic providers, owner-owned encrypted provider secrets and one household binding per provider;
 - `workflows`, which hold only the LangGraph thread/run, last-observed status and external basket/order references;
 - `workflow_approvals`, which hold only request/decision metadata;
 - outbox retry transport and audit logs.

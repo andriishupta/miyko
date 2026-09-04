@@ -54,7 +54,7 @@ export default function OnboardingScreen() {
       setMembershipEstablished(true);
       const nextSession = await refresh();
       if (!nextSession?.householdId) throw new Error('The invitation was accepted, but no household membership was returned.');
-      setStep(2);
+      router.replace('/home');
     } catch (cause) {
       setMembershipEstablished(false);
       setError(cause instanceof ApiError ? cause.message : 'Could not join household.');
@@ -73,7 +73,7 @@ export default function OnboardingScreen() {
           {choice === 'create' && <Surface><MiykoText variant="section">Create household</MiykoText><MiykoText variant="body" color="textSecondary">Create the shared space for workflows and approvals.</MiykoText><Field label="HOUSEHOLD NAME" placeholder="e.g. Petrenko family" value={householdName} onChangeText={setHouseholdName} />{error && <MiykoText variant="caption" color="danger">{error}</MiykoText>}<PrimaryButton label="Create household" loading={loading} onPress={() => void createHousehold()} /></Surface>}
           {choice === 'join' && <Surface><MiykoText variant="section">Join household</MiykoText><MiykoText variant="body" color="textSecondary">Enter the invitation ID. This calls the authenticated invitation acceptance route and then refreshes your session.</MiykoText><Field label="INVITATION ID" placeholder="Invitation UUID" value={invitationId} onChangeText={setInvitationId} />{error && <MiykoText variant="caption" color="danger">{error}</MiykoText>}<PrimaryButton label="Join household" loading={loading} onPress={() => void joinHousehold()} /></Surface>}
         </>}
-        {step === 2 && <Surface><MiykoText variant="section">Connect a store provider</MiykoText><MiykoText variant="body" color="textSecondary">Connect Silpo to start workflows. Provider credentials are sent to the API and are not stored in the app.</MiykoText><ProviderManagement allowBind onComplete={() => router.replace('/home')} /></Surface>}
+        {step === 2 && <Surface><MiykoText variant="section">Connect a store provider</MiykoText><MiykoText variant="body" color="textSecondary">Connect Silpo to start workflows. Provider credentials are sent to the API and are not stored in the app.</MiykoText><ProviderManagement onComplete={() => router.replace('/home')} /></Surface>}
         <SecondaryButton label="Sign out" onPress={logout} />
       </View>
     </ScreenScroll>

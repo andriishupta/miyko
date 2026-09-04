@@ -28,6 +28,7 @@ type GraphStartInput = {
 ```
 
 `workflowId` is the MiyKo UUID and the LangGraph `thread_id`. `eventId` is the outbox event ID used for run idempotency and tracing. The graph must treat it as a correlation ID, not as user content.
+`providerSlug` identifies the provider already connected to the household. The graph must use that household binding and owner-authorized provider access; it must not ask the requesting member for provider credentials.
 
 ## Resume input
 

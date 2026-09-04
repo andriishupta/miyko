@@ -4,6 +4,8 @@ Status: primary production graph for the MVP.
 
 This graph is deployed to LangSmith/LangGraph Cloud. MiyKo API creates the household workflow reference, starts a thread, forwards actions and stores only the last-observed projection. The graph owns the long-running state, checkpoints, conversation, recipe generation, MCP calls and pause/resume.
 
+The graph always runs in the context of a MiyKo household. The household owner authorizes the provider once; graph runs started by other members use the existing household binding and never request a second provider login.
+
 ## Deployment target
 
 Create a separate LangGraph application for the graph. It can live in its own repository or directory; it must not add a checkpointer or workflow-state tables to MiyKo PostgreSQL.

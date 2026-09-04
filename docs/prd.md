@@ -304,9 +304,9 @@ Silpo access and refresh tokens:
 - are stored only on the backend;
 - are encrypted at rest;
 - are never exposed to React Native;
-- are associated with the connected household member.
+- are associated with the household owner who authorized the provider.
 
-The household selects which connected Silpo account owns the final shopping basket.
+Each household has one active connection per provider. Household members use that owner-authorized connection; they do not create separate Silpo connections. The managed workflow and Silpo MCP own the final basket and order.
 
 ## 11. Technical Architecture
 

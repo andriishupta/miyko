@@ -48,7 +48,15 @@ export type UserProviderAccount = {
 };
 export type ProviderAuthRequest = { login: string; password: string };
 export type ProviderConnectionResponse = { provider: Provider; account: UserProviderAccount };
-export type ProviderAccountsResponse = { items: Array<UserProviderAccount & { provider: Provider }> };
+export type HouseholdProviderConnection = {
+  id: UUID;
+  providerId: UUID;
+  accountLogin: string | null;
+  status: ProviderAccountStatus;
+  connectedByMemberId: UUID;
+  provider: Provider;
+};
+export type ProviderAccountsResponse = { items: HouseholdProviderConnection[] };
 
 export type LoginRequest = { email: string; password: string };
 export type RegisterRequest = { email: string; password: string; firstName: string; lastName: string; displayName?: string | null };

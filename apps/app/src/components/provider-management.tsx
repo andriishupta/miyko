@@ -10,15 +10,15 @@ import { useTheme } from '@/hooks/use-theme';
 import { useOptionalProviderStatus } from '@/providers/provider-status-context';
 
 type ProviderManagementProps = {
-  allowBind?: boolean;
   onComplete?: () => void;
 };
 
-export function ProviderManagement({ allowBind = false, onComplete }: ProviderManagementProps) {
+export function ProviderManagement({ onComplete }: ProviderManagementProps) {
   const theme = useTheme();
   const providerStatus = useOptionalProviderStatus();
   const [providers, setProviders] = useState<ApiProvider[]>([]);
   const [accounts, setAccounts] = useState<ApiProviderAccountsResponse['items']>([]);
+  const [isOwner, setIsOwner] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
   const [login, setLogin] = useState('');
@@ -30,9 +30,10 @@ export function ProviderManagement({ allowBind = false, onComplete }: ProviderMa
     setLoading(true);
     setError(null);
     try {
-      const [providerItems, accountResponse] = await Promise.all([api.providers.list(), api.providers.accounts()]);
+      const [providerItems, accountResponse, household] = await Promise.all([api.providers.list(), api.providers.accounts(), api.household.summary()]);
       setProviders(providerItems);
       setAccounts(accountResponse.items);
+      setIsOwner(household.currentMember.role === 'owner');
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : 'Could not load store providers.');
     } finally {
@@ -77,18 +78,10 @@ export function ProviderManagement({ allowBind = false, onComplete }: ProviderMa
       } else {
         await api.providers.connect(provider.slug, { login: login.trim(), password });
       }
-      await api.providers.bind(provider.slug);
       setLogin('');
       setPassword('');
       await load();
     }, `Could not connect ${provider.name}.`);
-    if (completed) onComplete?.();
-  }
-
-  async function bindProvider(provider: ApiProvider) {
-    const completed = await runProviderAction(provider, async () => {
-      await api.providers.bind(provider.slug);
-    }, `Could not connect ${provider.name} to this household.`, `${provider.name} is connected to this household.`);
     if (completed) onComplete?.();
   }
 
@@ -122,10 +115,11 @@ export function ProviderManagement({ allowBind = false, onComplete }: ProviderMa
             <Divider />
             {isConnected ? (
               <View style={{ gap: Spacing.two }}>
-                <MiykoText variant="body" color="textSecondary">This provider account is ready to use.</MiykoText>
-                {allowBind && <PrimaryButton label="Use in this household" loading={isBusy} onPress={() => void bindProvider(provider)} icon="cart" />}
-                <SecondaryButton label="Disconnect" onPress={() => void disconnectProvider(provider)} />
+                <MiykoText variant="body" color="textSecondary">This provider is ready for the household.</MiykoText>
+                {isOwner && <SecondaryButton label="Disconnect" onPress={() => void disconnectProvider(provider)} />}
               </View>
+            ) : !isOwner ? (
+              <MiykoText variant="body" color="textSecondary">The household owner must connect this provider.</MiykoText>
             ) : (
               <View style={{ gap: Spacing.two }}>
                 <Field label="PROVIDER LOGIN" placeholder="Email or phone" value={login} onChangeText={setLogin} />

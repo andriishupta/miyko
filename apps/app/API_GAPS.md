@@ -2,7 +2,7 @@
 
 The app now uses the thin API control plane and shared `@miyko/contracts` types.
 
-- Onboarding creates or joins a household, then connects and binds the Silpo provider.
+- Onboarding creates a household, then its owner connects the Silpo provider once. Members join the existing household binding and do not reconnect Silpo.
 - Text and audio requests create a workflow through `POST /workflows` or `POST /audio/process`.
 - The app displays workflow references, last-observed status and pending approval categories; LangGraph Cloud and Silpo MCP own messages, recipes, products, images, basket contents, fulfillment and pause/resume state.
 - Owner approval or decline is sent through `POST /workflows/:workflowId/actions`. Replacement, fulfillment and delivery-slot actions use the same endpoint.

@@ -11,7 +11,7 @@ export default function ProvidersScreen() {
     <>
       <Stack.Screen options={{ title: 'Store providers' }} />
       <ScreenScroll bottomInset={insets.bottom + 112}>
-        <ProviderManagement allowBind />
+        <ProviderManagement />
       </ScreenScroll>
     </>
   );

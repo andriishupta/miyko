@@ -23,7 +23,4 @@ export const providerSecretStorage = {
     return providerSecretCrypto.get(access.encryptedValue.toString(), refresh?.encryptedValue.toString() ?? null)
   },
 
-  async revoke(accountId: string) {
-    await db.delete(providerSecrets).where(eq(providerSecrets.userProviderAccountId, accountId))
-  },
 }

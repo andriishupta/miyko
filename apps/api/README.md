@@ -25,7 +25,7 @@ Missing required configuration fails explicitly. No environment-based mock or fa
 ## Routes
 
 - Public/auth bootstrap: `/health`, `/auth/*`, `/onboarding/households`, `/invitations/*`.
-- Provider connection: `/providers`, `/providers/accounts`, `/:providerSlug/tools`, `connect`, `reauthorize`, `bind` and disconnect. Product, basket, order and fulfillment tools are not exposed as API routes; the managed LangGraph workflow owns those calls.
+- Provider connection: `/providers`, `/providers/accounts`, `/:providerSlug/tools`, `connect`, `reauthorize` and disconnect. The household owner authorizes a provider once; members read and use the household binding without reconnecting. Product, basket, order and fulfillment tools are not exposed as API routes; the managed LangGraph workflow owns those calls.
 - Managed workflow: `GET/POST /workflows`, `GET /workflows/:workflowId` and `POST /workflows/:workflowId/actions`.
 - Supporting surfaces: `/dashboard`, `/household`, `/audio/process` and `/memory`.
 
@@ -34,7 +34,7 @@ Starting a workflow creates one deterministic UUID. The same UUID is used as the
 ## Flow
 
 ```text
-login/register → create or join household → connect/bind Silpo
+login/register → create or join household → household owner connects Silpo once
   → create one workflow for the request
   → LangGraph + Mem0 + Silpo MCP
   → interrupt for replacement / fulfillment / delivery slot / approval

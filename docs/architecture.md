@@ -9,7 +9,7 @@ MiyKo is a household control plane around managed agent workflows. It does not b
 | Concern | Owner |
 | --- | --- |
 | Authentication, household membership and roles | MiyKo API + PostgreSQL |
-| Provider account connection and encrypted credentials | MiyKo API + PostgreSQL |
+| Owner provider credentials and household provider binding | MiyKo API + PostgreSQL |
 | Workflow state, messages, recipe generation, basket and pause/resume | LangGraph Cloud |
 | Long-term household/member memory | Mem0 Cloud |
 | Products, images, basket mutation, fulfillment and order details | Silpo MCP/provider |
@@ -22,7 +22,7 @@ PostgreSQL stores only a small control-plane projection: the household, provider
 ```text
 login/register
   → create or join household
-  → connect and bind a store provider
+  → household owner connects a store provider once
   → create one workflow for the request
   → LangGraph uses Mem0 context and reads current Silpo MCP state
   → graph pauses for a replacement, fulfillment mode, delivery slot or provider action
@@ -54,7 +54,7 @@ The API does not interpret recipes, normalize provider products, maintain meal p
 
 ## Provider boundary
 
-`StoreProvider` is intentionally small: authentication, reauthorization and tool discovery. `StoreProviderService` owns provider lookup, user account persistence, encrypted secrets and household binding. Product search, basket updates and fulfillment are MCP tools invoked from the managed workflow after authorization; they are not API-owned catalog methods.
+`StoreProvider` is intentionally small: authentication, reauthorization and tool discovery. `user_providers` and `provider_secrets` hold the owner’s encrypted provider credentials; `connected_provider_accounts` is the single household-scoped binding that points to those credentials and records which member authorized it. `StoreProviderService` owns provider lookup, owner account persistence, encrypted secrets and household binding. Members use the existing household binding and do not reconnect the provider. Product search, basket updates and fulfillment are MCP tools invoked from the managed workflow after authorization; they are not API-owned catalog methods.
 
 The provider registry remains useful because it resolves provider-specific authentication/MCP wiring by slug. Adding another store should not change household, workflow or approval tables.
 
@@ -79,7 +79,7 @@ The baseline contains only:
 
 - `users`, `user_sessions`;
 - `households`, `household_members`, `household_invitations`;
-- `providers`, `user_providers`, `provider_secrets`, `connected_provider_accounts`, `household_provider_settings`;
+- `providers`, `user_providers`, `provider_secrets`, `connected_provider_accounts`;
 - `workflows`, `workflow_approvals`, `outbox_events`, `audit_logs`.
 
 The removed tables are intentional: `food_intents`, `planning_runs`, `meal_plans`, `meal_plan_items`, `provider_products`, product replacements, local proposals/items, local orders/items, deliveries, feedback and provider/memory sync records.

@@ -55,7 +55,6 @@ export const api = {
     connect: (providerSlug: string, body: ProviderAuthRequest) => request<ApiProviderConnectionResponse>(`/providers/${encodeURIComponent(providerSlug)}/connect`, { method: "POST", body }),
     reauthorize: (providerSlug: string, body: Partial<ProviderAuthRequest>) => request<ApiProviderConnectionResponse>(`/providers/${encodeURIComponent(providerSlug)}/reauthorize`, { method: "POST", body }),
     disconnect: (providerSlug: string) => request<{ disconnected: boolean }>(`/providers/${encodeURIComponent(providerSlug)}`, { method: "DELETE" }),
-    bind: (providerSlug: string) => request<ApiProviderConnectionResponse>(`/providers/${encodeURIComponent(providerSlug)}/bind`, { method: "POST" }),
   },
   workflows: {
     list: () => request<ApiWorkflow[]>("/workflows"),

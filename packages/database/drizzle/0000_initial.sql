@@ -116,19 +116,10 @@ CREATE TABLE public.connected_provider_accounts (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   household_id uuid NOT NULL REFERENCES public.households(id) ON DELETE CASCADE,
   provider_id uuid NOT NULL REFERENCES public.providers(id) ON DELETE RESTRICT,
-  user_provider_account_id uuid REFERENCES public.user_providers(id) ON DELETE SET NULL,
+  user_provider_account_id uuid NOT NULL REFERENCES public.user_providers(id) ON DELETE CASCADE,
   authorized_by_member_id uuid NOT NULL REFERENCES public.household_members(id) ON DELETE RESTRICT,
   status public.provider_account_status NOT NULL DEFAULT 'active',
   revoked_at timestamptz,
-  created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
-);
-
-CREATE TABLE public.household_provider_settings (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  household_id uuid NOT NULL REFERENCES public.households(id) ON DELETE CASCADE,
-  provider_id uuid NOT NULL REFERENCES public.providers(id) ON DELETE RESTRICT,
-  selected_account_id uuid REFERENCES public.connected_provider_accounts(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -214,9 +205,8 @@ CREATE UNIQUE INDEX providers_name_uq ON public.providers (name);
 CREATE UNIQUE INDEX user_providers_user_provider_subject_uq ON public.user_providers (user_id, provider_id, provider_subject);
 CREATE INDEX user_providers_user_status_idx ON public.user_providers (user_id, status);
 CREATE UNIQUE INDEX provider_secrets_account_kind_uq ON public.provider_secrets (user_provider_account_id, kind);
-CREATE UNIQUE INDEX connected_provider_accounts_household_provider_member_uq ON public.connected_provider_accounts (household_id, provider_id, authorized_by_member_id);
+CREATE UNIQUE INDEX connected_provider_accounts_household_provider_uq ON public.connected_provider_accounts (household_id, provider_id);
 CREATE INDEX connected_provider_accounts_household_status_idx ON public.connected_provider_accounts (household_id, status);
-CREATE UNIQUE INDEX household_provider_settings_household_provider_uq ON public.household_provider_settings (household_id, provider_id);
 CREATE UNIQUE INDEX workflows_thread_uq ON public.workflows (thread_id);
 CREATE INDEX workflows_household_status_idx ON public.workflows (household_id, status);
 CREATE INDEX workflow_approvals_workflow_status_idx ON public.workflow_approvals (workflow_id, status);
@@ -359,7 +349,6 @@ ALTER TABLE public.providers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_providers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.provider_secrets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.connected_provider_accounts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.household_provider_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.workflows ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.workflow_approvals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.outbox_events ENABLE ROW LEVEL SECURITY;
@@ -388,7 +377,7 @@ CREATE POLICY providers_select_active ON public.providers FOR SELECT USING (stat
 DO $$
 DECLARE table_name text;
 BEGIN
-  FOREACH table_name IN ARRAY ARRAY['connected_provider_accounts', 'household_provider_settings', 'workflows', 'workflow_approvals', 'outbox_events', 'audit_logs'] LOOP
+  FOREACH table_name IN ARRAY ARRAY['connected_provider_accounts', 'workflows', 'workflow_approvals', 'outbox_events', 'audit_logs'] LOOP
     EXECUTE format('CREATE POLICY %I_select ON public.%I FOR SELECT USING (public.miyko_is_household_member(household_id))', table_name, table_name);
     EXECUTE format('CREATE POLICY %I_insert ON public.%I FOR INSERT WITH CHECK (public.miyko_is_household_member(household_id))', table_name, table_name);
     EXECUTE format('CREATE POLICY %I_update ON public.%I FOR UPDATE USING (public.miyko_is_household_member(household_id)) WITH CHECK (public.miyko_is_household_member(household_id))', table_name, table_name);

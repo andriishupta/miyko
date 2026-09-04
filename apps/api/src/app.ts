@@ -12,7 +12,7 @@ import { dashboardRoutes } from './features/dashboard/dashboard.routes.js'
 import { householdsRoutes, invitationAcceptanceRoutes, onboardingRoutes } from './features/households/households.routes.js'
 import { audioRoutes } from './features/audio/audio.routes.js'
 import { memoryRoutes } from './features/memory/memory.routes.js'
-import { householdProviderRoutes, providersRoutes } from './features/providers/providers.routes.js'
+import { providersRoutes } from './features/providers/providers.routes.js'
 import { workflowsRoutes } from './features/workflows/workflows.routes.js'
 
 const protectedApi = new Hono()
@@ -22,7 +22,6 @@ protectedApi.route('/dashboard', dashboardRoutes)
 protectedApi.route('/household', householdsRoutes)
 protectedApi.route('/audio', audioRoutes)
 protectedApi.route('/memory', memoryRoutes)
-protectedApi.route('/providers', householdProviderRoutes)
 protectedApi.route('/workflows', workflowsRoutes)
 
 export const app = new Hono()

@@ -17,7 +17,15 @@ export const userProviderAccountSchema = z.object({
   accessTokenExpiresAt: isoDate.nullable(), refreshTokenExpiresAt: isoDate.nullable(), lastUsedAt: isoDate.nullable(),
 }).strict();
 export const providerConnectionResponseSchema = z.object({ provider: providerSchema, account: userProviderAccountSchema }).strict();
-export const providerAccountsResponseSchema = z.object({ items: z.array(userProviderAccountSchema.extend({ provider: providerSchema })) }).strict();
+export const householdProviderConnectionSchema = z.object({
+  id: uuid,
+  providerId: uuid,
+  accountLogin: z.string().nullable(),
+  status: z.enum(["active", "expired", "revoked", "reconnect_required"]),
+  connectedByMemberId: uuid,
+  provider: providerSchema,
+}).strict();
+export const providerAccountsResponseSchema = z.object({ items: z.array(householdProviderConnectionSchema) }).strict();
 
 const providerActionSchema = z.object({
   type: z.literal("provider_action"),
