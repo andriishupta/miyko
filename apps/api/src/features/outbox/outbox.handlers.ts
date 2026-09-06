@@ -19,6 +19,10 @@ const payloadOf = <T>(event: OutboxEventRow, schema: z.ZodType<T>) => {
   return parsed.data;
 };
 
+const requireEventActor = (context: RequestContext, requestedByMemberId: string) => {
+  if (context.membership.id !== requestedByMemberId) throw new AppError("OUTBOX_ACTOR_UNAVAILABLE", "Workflow actor is no longer an active household member", 403);
+};
+
 const audit = async (context: RequestContext, event: OutboxEventRow, action: string) => {
   const existing = await db.query.auditLogs.findFirst({ where: and(eq(auditLogs.householdId, context.household.id), eq(auditLogs.aggregateId, event.aggregateId), eq(auditLogs.action, action)) });
   if (!existing) await db.insert(auditLogs).values({ householdId: context.household.id, actorMemberId: context.membership.id, action, aggregateType: event.aggregateType, aggregateId: event.aggregateId, metadata: { sourceEventId: event.id } });
@@ -62,9 +66,13 @@ export type OutboxHandler = (context: RequestContext, event: OutboxEventRow) => 
 export const outboxHandlers: Record<string, OutboxHandler> = {
   async "workflow.started"(context, event) {
     const payload = payloadOf(event, startedPayload);
+    requireEventActor(context, payload.requestedByMemberId);
     const workflow = await db.query.workflows.findFirst({ where: and(eq(workflows.id, payload.workflowId), eq(workflows.householdId, context.household.id)), with: { provider: true } });
     if (!workflow) throw notFound("Workflow");
-    const reference = await agentLayer.startWorkflow({ workflowId: workflow.id, householdId: workflow.householdId, memberId: payload.requestedByMemberId, text: payload.input.text, providerSlug: payload.input.providerSlug ?? workflow.provider?.slug, source: payload.input.source, eventId: event.id });
+    const providerSlug = payload.input.providerSlug ?? workflow.provider?.slug;
+    if (!providerSlug) throw new AppError("WORKFLOW_PROVIDER_MISSING", "Workflow provider is missing", 409);
+    const providerAccessToken = await storeProviderService.getAccessToken(context, providerSlug);
+    const reference = await agentLayer.startWorkflow({ workflowId: workflow.id, workflowKind: workflow.workflowKind, householdId: workflow.householdId, memberId: payload.requestedByMemberId, memberRole: context.membership.role, text: payload.input.text, providerSlug, providerAccessToken, source: payload.input.source, eventId: event.id });
     await updateReference(context, workflow.id, reference);
     await recordInterrupt(context, workflow.id, payload.requestedByMemberId, reference);
     await audit(context, event, "workflow.started");
@@ -72,11 +80,14 @@ export const outboxHandlers: Record<string, OutboxHandler> = {
 
   async "workflow.action_requested"(context, event) {
     const payload = payloadOf(event, actionPayload);
+    requireEventActor(context, payload.requestedByMemberId);
     const action = workflowActionSchema.parse(payload.action);
     const workflow = await db.query.workflows.findFirst({ where: and(eq(workflows.id, payload.workflowId), eq(workflows.householdId, context.household.id)), with: { provider: true } });
     if (!workflow) throw notFound("Workflow");
     if (!workflow.threadId) throw new AppError("WORKFLOW_REFERENCE_MISSING", "Workflow thread reference is missing", 409);
-    const reference = await agentLayer.resumeWorkflow({ workflowId: workflow.id, householdId: workflow.householdId, memberId: payload.requestedByMemberId, text: "resume", providerSlug: workflow.provider?.slug, source: "text", eventId: event.id, threadId: workflow.threadId, action });
+    if (!workflow.provider?.slug) throw new AppError("WORKFLOW_PROVIDER_MISSING", "Workflow provider is missing", 409);
+    const providerAccessToken = await storeProviderService.getAccessToken(context, workflow.provider.slug);
+    const reference = await agentLayer.resumeWorkflow({ workflowId: workflow.id, workflowKind: workflow.workflowKind, householdId: workflow.householdId, memberId: payload.requestedByMemberId, memberRole: context.membership.role, text: "resume", providerSlug: workflow.provider.slug, providerAccessToken, source: "text", eventId: event.id, threadId: workflow.threadId, action });
     await updateReference(context, workflow.id, reference);
     await recordInterrupt(context, workflow.id, payload.requestedByMemberId, reference);
     await audit(context, event, `workflow.action.${action.type}`);

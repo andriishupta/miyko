@@ -1,0 +1,7 @@
+{
+  "node_version": "24",
+  "graphs": {
+    "step-order": "./src/step-order.ts:stepOrderGraph"
+  },
+  "env": ".env"
+}

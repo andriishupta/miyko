@@ -10,6 +10,10 @@ export const workflowsRoutes = new Hono();
 
 workflowsRoutes.get("/", async (c) => c.json({ data: await workflowsService.list(c.get("requestContext")) }));
 workflowsRoutes.post("/", rateLimit("workflow-create", 20, 60_000), async (c) => c.json({ data: { workflow: await workflowsService.create(c.get("requestContext"), await parseJson(c, createWorkflowSchema)) } }, 201));
+workflowsRoutes.get("/:workflowId/view", async (c) => {
+  const { workflowId } = parseParams(c, workflowIdSchema);
+  return c.json({ data: { view: await workflowsService.getView(c.get("requestContext"), workflowId) } });
+});
 workflowsRoutes.get("/:workflowId", async (c) => {
   const { workflowId } = parseParams(c, workflowIdSchema);
   return c.json({ data: { workflow: await workflowsService.get(c.get("requestContext"), workflowId) } });

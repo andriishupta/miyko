@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { outboxEvents, workflowApprovals, workflows } from "@miyko/database/schema";
-import type { RequestContext, Workflow, WorkflowAction, WorkflowApproval } from "@miyko/contracts";
+import { WORKFLOW_KIND, type RequestContext, type Workflow, type WorkflowAction, type WorkflowApproval, type WorkflowKind } from "@miyko/contracts";
 import { db } from "../../lib/database.js";
 import { conflict, notFound } from "../../lib/errors.js";
 import { storeProviderService } from "../../integrations/store-providers/store-provider.service.js";
+import { agentLayer } from "../../integrations/agent/graphs.js";
 
 type WorkflowRow = typeof workflows.$inferSelect;
 type ApprovalRow = typeof workflowApprovals.$inferSelect;
@@ -26,6 +27,7 @@ export const toWorkflow = (row: WorkflowRow & { approvals?: ApprovalRow[] }): Wo
   householdId: row.householdId,
   startedByMemberId: row.startedByMemberId,
   providerId: row.providerId,
+  workflowKind: row.workflowKind,
   status: row.status,
   workflowProvider: "langgraph",
   threadId: row.threadId,
@@ -41,8 +43,9 @@ export const toWorkflow = (row: WorkflowRow & { approvals?: ApprovalRow[] }): Wo
 });
 
 export class WorkflowsService {
-  async create(context: RequestContext, input: { text: string; providerSlug?: string; source?: "text" | "audio" }) {
+  async create(context: RequestContext, input: { text: string; providerSlug?: string; workflowKind?: WorkflowKind; source?: "text" | "audio" }) {
     const provider = await storeProviderService.findActiveProvider(context, input.providerSlug);
+    const workflowKind = input.workflowKind ?? WORKFLOW_KIND.stepOrder;
     const workflowId = randomUUID();
     const workflow = await db.transaction(async (tx) => {
       const rows = await tx.insert(workflows).values({
@@ -50,6 +53,7 @@ export class WorkflowsService {
         householdId: context.household.id,
         startedByMemberId: context.membership.id,
         providerId: provider.id,
+        workflowKind,
         status: "pending",
         threadId: workflowId,
       }).returning();
@@ -77,6 +81,12 @@ export class WorkflowsService {
     const row = await db.query.workflows.findFirst({ where: and(eq(workflows.id, workflowId), eq(workflows.householdId, context.household.id)), with: { approvals: true } });
     if (!row) throw notFound("Workflow");
     return toWorkflow(row);
+  }
+
+  async getView(context: RequestContext, workflowId: string) {
+    const row = await db.query.workflows.findFirst({ where: and(eq(workflows.id, workflowId), eq(workflows.householdId, context.household.id)) });
+    if (!row) throw notFound("Workflow");
+    return agentLayer.getWorkflowView({ workflowKind: row.workflowKind, threadId: row.threadId });
   }
 
   async requestAction(context: RequestContext, workflowId: string, action: WorkflowAction, idempotencyKey: string) {
@@ -108,10 +118,7 @@ export class WorkflowsService {
         await tx.update(workflowApprovals).set({ status: action.type === "approve" ? "approved" : "declined", decidedByMemberId: context.membership.id, decidedAt: now, updatedAt: now }).where(eq(workflowApprovals.id, approval.id));
       }
 
-      const updates: Partial<WorkflowRow> = { updatedAt: now };
-      if (action.type === "fulfillment_selected") updates.fulfillmentMode = action.mode;
-      if (action.type === "delivery_slot_selected") { updates.scheduledFrom = new Date(action.scheduledFrom); updates.scheduledTo = new Date(action.scheduledTo); }
-      const updated = await tx.update(workflows).set(updates).where(eq(workflows.id, workflow.id)).returning();
+      const updated = await tx.update(workflows).set({ updatedAt: now }).where(eq(workflows.id, workflow.id)).returning();
       const latestEvent = await tx.query.outboxEvents.findFirst({ where: and(eq(outboxEvents.aggregateType, "workflow"), eq(outboxEvents.aggregateId, workflow.id), eq(outboxEvents.eventType, "workflow.action_requested")), orderBy: [desc(outboxEvents.version)] });
       await tx.insert(outboxEvents).values({ householdId: workflow.householdId, aggregateType: "workflow", aggregateId: workflow.id, eventType: "workflow.action_requested", version: (latestEvent?.version ?? 0) + 1, payload: { workflowId: workflow.id, requestedByMemberId: context.membership.id, idempotencyKey, action } });
       return updated[0];

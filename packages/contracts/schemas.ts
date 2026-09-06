@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { WORKFLOW_KIND } from "./index.js";
 
 const uuid = z.string().uuid();
 const isoDate = z.string().datetime({ offset: true });
@@ -9,14 +10,6 @@ export const providerSchema = z.object({
   capabilities: z.array(z.string().min(1)),
 }).strict();
 
-export const providerAuthRequestSchema = z.object({ login: z.string().min(1), password: z.string().min(1) }).strict();
-export const userProviderAccountSchema = z.object({
-  id: uuid, providerId: uuid, providerSubject: z.string().nullable(), accountLogin: z.string().nullable(),
-  authMethod: z.literal("mcp"),
-  status: z.enum(["active", "expired", "revoked", "reconnect_required"]), scopes: z.array(z.string()),
-  accessTokenExpiresAt: isoDate.nullable(), refreshTokenExpiresAt: isoDate.nullable(), lastUsedAt: isoDate.nullable(),
-}).strict();
-export const providerConnectionResponseSchema = z.object({ provider: providerSchema, account: userProviderAccountSchema }).strict();
 export const householdProviderConnectionSchema = z.object({
   id: uuid,
   providerId: uuid,
@@ -25,6 +18,8 @@ export const householdProviderConnectionSchema = z.object({
   provider: providerSchema,
 }).strict();
 export const providerConnectionsResponseSchema = z.object({ items: z.array(householdProviderConnectionSchema) }).strict();
+
+export const workflowKindSchema = z.enum([WORKFLOW_KIND.stepOrder]);
 
 const providerActionSchema = z.object({
   type: z.literal("provider_action"),
@@ -43,6 +38,7 @@ export const workflowActionSchema = z.discriminatedUnion("type", [
 export const createWorkflowSchema = z.object({
   text: z.string().trim().min(1).max(2_000),
   providerSlug: z.string().trim().min(1).max(80).regex(/^[a-z0-9-]+$/).optional(),
+  workflowKind: workflowKindSchema.default(WORKFLOW_KIND.stepOrder),
   source: z.enum(["text", "audio"]).optional(),
 }).strict();
 

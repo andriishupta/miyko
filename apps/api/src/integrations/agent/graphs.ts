@@ -5,16 +5,16 @@ import { householdMemoryNamespace, memberMemoryNamespace } from "../memory/memor
 import { requireAgentConfig } from "./agent.config.js";
 import type { AgentLayer, WorkflowAction, WorkflowInput, WorkflowInterrupt, WorkflowReference } from "./agent.port.js";
 
-const clientFor = () => {
-  const config = requireAgentConfig();
-  return { client: new Client({ apiUrl: config.apiUrl, apiKey: config.apiKey, timeoutMs: 30_000 }), workflow: config.workflow };
+const clientForWorkflow = (workflowKind: WorkflowInput["workflowKind"]) => {
+  const config = requireAgentConfig(workflowKind);
+  return { client: new Client({ apiUrl: config.apiUrl, ...(config.apiKey ? { apiKey: config.apiKey } : {}), timeoutMs: 30_000 }), workflow: config.workflow };
 };
 
 const statusOf = (status: string): WorkflowReference["status"] => {
   if (["pending", "running", "interrupted", "succeeded", "failed", "cancelled"].includes(status)) return status as WorkflowReference["status"];
   if (status === "success") return "succeeded";
   if (status === "error" || status === "timeout") return "failed";
-  throw new AppError("AGENT_INVALID_RESPONSE", "LangGraph Cloud returned an unsupported workflow status", 502);
+  throw new AppError("AGENT_INVALID_RESPONSE", "LangGraph returned an unsupported workflow status", 502);
 };
 
 const existingRun = async (client: Client, threadId: string, eventId: string) => {
@@ -25,9 +25,9 @@ const existingRun = async (client: Client, threadId: string, eventId: string) =>
 const interruptValueSchema = z.object({
   requestId: z.string().min(1).max(255).optional(),
   externalRequestId: z.string().min(1).max(255).optional(),
-  action: z.enum(["provider_action", "fulfillment", "delivery_slot"]).optional(),
-  type: z.enum(["provider_action", "fulfillment", "delivery_slot"]).optional(),
-  category: z.enum(["provider_action", "fulfillment", "delivery_slot"]).optional(),
+  action: z.enum(["provider_action", "fulfillment", "delivery_slot", "workflow_action"]).optional(),
+  type: z.enum(["provider_action", "fulfillment", "delivery_slot", "workflow_action"]).optional(),
+  category: z.enum(["provider_action", "fulfillment", "delivery_slot", "workflow_action"]).optional(),
 }).passthrough();
 
 const interruptSchema = z.object({
@@ -43,7 +43,17 @@ const projectionSchema = z.object({
   scheduledTo: z.string().datetime({ offset: true }).nullable().optional(),
 }).passthrough();
 
-const parseInterrupt = (candidate: unknown): WorkflowInterrupt => {
+const workflowViewSchema = z.object({
+  phase: z.enum(["collecting", "approval_required", "basket_ready", "ready_for_checkout", "completed"]),
+  summary: z.string(),
+  plannedRequests: z.array(z.object({ memberId: z.string().uuid(), text: z.string() })),
+  items: z.array(z.object({ name: z.string(), quantity: z.string().nullable(), price: z.number().nullable(), imageUrl: z.string().nullable() })),
+  total: z.number().nullable(),
+  currency: z.string().nullable(),
+  checkoutUrl: z.string().url().nullable(),
+}).passthrough();
+
+const parseInterrupt = (candidate: unknown): WorkflowInterrupt | undefined => {
   const parsed = interruptSchema.safeParse(candidate);
   if (!parsed.success) throw new AppError("AGENT_INVALID_INTERRUPT", "LangGraph returned an invalid interrupt", 502);
 
@@ -52,6 +62,7 @@ const parseInterrupt = (candidate: unknown): WorkflowInterrupt => {
 
   const action = value.data.action ?? value.data.type ?? value.data.category;
   if (!action) throw new AppError("AGENT_INVALID_INTERRUPT", "LangGraph interrupt has no supported action", 502);
+  if (action === "workflow_action") return undefined;
 
   return {
     action,
@@ -85,7 +96,8 @@ const observeRun = async (client: Client, threadId: string, runId: string) => {
 };
 
 const start = async (input: WorkflowInput): Promise<WorkflowReference> => {
-  const { client, workflow } = clientFor();
+  const { client, workflow } = clientForWorkflow(input.workflowKind);
+  const { providerAccessToken, ...workflowInput } = input;
   const memory = {
     householdNamespace: householdMemoryNamespace(input.householdId),
     memberNamespace: memberMemoryNamespace(input.memberId),
@@ -97,12 +109,14 @@ const start = async (input: WorkflowInput): Promise<WorkflowReference> => {
       householdId: input.householdId,
       memberId: input.memberId,
       workflowId: input.workflowId,
+      workflowKind: input.workflowKind,
       source: input.source,
       ...(input.providerSlug ? { providerSlug: input.providerSlug } : {}),
     },
   });
   const run = await existingRun(client, thread.thread_id, input.eventId) ?? await client.runs.create(thread.thread_id, workflow, {
-    input: { operation: "workflow.start", ...input, memory },
+    input: { operation: "workflow.start", ...workflowInput, memory },
+    context: { providerAccessToken },
     metadata: { sourceEventId: input.eventId },
     durability: "sync",
     multitaskStrategy: "enqueue",
@@ -112,9 +126,10 @@ const start = async (input: WorkflowInput): Promise<WorkflowReference> => {
 };
 
 const resume = async (input: WorkflowInput & { threadId: string; action: WorkflowAction }): Promise<WorkflowReference> => {
-  const { client, workflow } = clientFor();
+  const { client, workflow } = clientForWorkflow(input.workflowKind);
   const run = await existingRun(client, input.threadId, input.eventId) ?? await client.runs.create(input.threadId, workflow, {
-    command: { resume: { eventId: input.eventId, action: input.action } },
+    command: { resume: { eventId: input.eventId, action: input.action, actor: { memberId: input.memberId, role: input.memberRole } } },
+    context: { providerAccessToken: input.providerAccessToken },
     metadata: { sourceEventId: input.eventId },
     durability: "sync",
     multitaskStrategy: "enqueue",
@@ -123,5 +138,13 @@ const resume = async (input: WorkflowInput & { threadId: string; action: Workflo
   return { provider: "langgraph", threadId: input.threadId, runId: run.run_id, ...observed };
 };
 
-export const createAgentLayer = (): AgentLayer => ({ startWorkflow: start, resumeWorkflow: resume });
+const getWorkflowView: AgentLayer["getWorkflowView"] = async ({ workflowKind, threadId }) => {
+  const { client } = clientForWorkflow(workflowKind);
+  const state = await client.threads.getState(threadId);
+  const parsed = workflowViewSchema.safeParse(state.values);
+  if (!parsed.success) throw new AppError("AGENT_INVALID_RESPONSE", "LangGraph returned an invalid workflow view", 502);
+  return parsed.data;
+};
+
+export const createAgentLayer = (): AgentLayer => ({ startWorkflow: start, resumeWorkflow: resume, getWorkflowView });
 export const agentLayer = createAgentLayer();

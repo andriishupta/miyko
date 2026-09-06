@@ -22,7 +22,7 @@ A household may contain one person or multiple family members.
 
 ## 2. Elevator Pitch
 
-MiyKo is a household food agent that remembers what people want to eat, what they previously purchased and what worked for them. It combines long-term memory with the official Silpo MCP to transform a few words into a personalized shopping plan and real basket. Household members can contribute requests, while the owner approves the final purchase. Afterward, MiyKo learns from the outcome and improves the next shopping cycle.
+MiyKo is a household food agent that remembers what people want to eat, what they previously purchased and what worked for them. It combines long-term memory with the official Silpo MCP to transform a few words into a personalized shopping plan and real basket. Household members can contribute requests, while an owner or admin controls provider mutations. Afterward, MiyKo learns from the outcome and improves the next shopping cycle.
 
 ## 3. Problem
 
@@ -91,13 +91,13 @@ Household members can:
 
 ### Agent-created Silpo basket
 
-The managed workflow:
+The MVP uses the typed `step-order` workflow. It:
 
 1. retrieves relevant memory;
 2. checks previous Silpo purchases;
 3. generates the recipe and resolves actual products through Silpo MCP;
 4. proposes replacements or fulfillment choices;
-5. pauses for household decisions and owner approval;
+5. pauses for household decisions and owner/admin approval;
 6. writes approved changes to the Silpo basket.
 
 ### Food Loop
@@ -147,26 +147,23 @@ MiyKo:
 
 ### Household collaboration
 
-The wife adds:
+The wife adds or replaces an item:
 
 > Please add a dessert.
 
-A child profile requests:
+A child profile requests a dessert:
 
-> I want chips instead of ice cream.
+> I want ice cream too.
 
-The managed workflow adds the request and pauses before changing the real basket.
+The managed workflow keeps the request in its LangGraph thread, rechecks the current MCP basket and pauses before changing the real basket. The owner can:
 
-The owner can:
-
-- approve the chips;
-- replace them;
-- reject them;
+- approve or decline the child request;
+- accept or change the partner's addition/replacement;
 - approve the remaining basket.
 
 ### Purchase
 
-After owner approval, the resumed LangGraph workflow revalidates the current Silpo MCP state, calls the cart tools and adds the confirmed products to the real provider basket.
+After an owner/admin command or approval, the resumed LangGraph workflow revalidates the current Silpo MCP state, calls the cart tools and adds the confirmed products to the real provider basket.
 
 ### Learning
 
@@ -187,10 +184,10 @@ A new managed workflow begins using updated long-term memory.
 
 ## 7. Agent Workflow
 
-The Agent Layer runs in LangGraph Cloud. A food event and an order are one managed workflow: LangGraph checkpoints it, pauses for provider or household decisions and resumes until basket and fulfillment choices are complete. It does not bypass owner approval.
+The Agent Layer runs in a local LangGraph Agent Server for the MVP and can move to a hosted deployment later. A request and an order are one managed workflow: LangGraph checkpoints it, pauses for provider or household decisions and resumes until basket and fulfillment choices are complete.
 
 ```text
-food event
+household request
   ↓
 create deterministic workflow reference
   ↓
@@ -200,14 +197,14 @@ recipe / basket / replacement / fulfillment choice
   ↓
 pause → household decision → resume by thread_id
   ↓
-owner approval
+owner/admin authorization
   ↓
-update provider basket or complete order
+update provider basket and return checkout link
   ↓
 feedback → Mem0 update
 ```
 
-Each workflow UUID becomes its deterministic LangGraph thread ID; LangGraph Cloud assigns run IDs and preserves workflow state between requests and restarts, while LangSmith Cloud traces the run. PostgreSQL stores only those external IDs, the provider reference, last observed status and approval decisions. Replacement, pickup/delivery, delivery-slot, approval and decline actions resume the thread. Owner approval is the final confirmation. PostgreSQL does not store graph checkpoints, basket items or authoritative order state; background workflow-status synchronization is deferred.
+Each workflow UUID becomes its deterministic LangGraph thread ID; LangGraph Agent Server assigns run IDs and preserves workflow state between requests. Local structured stdout logs record OpenAI and Silpo MCP execution without requiring cloud tracing. PostgreSQL stores only those external IDs, the provider reference, last observed status and approval decisions. Replacement, pickup/delivery, delivery-slot, approval and decline actions resume the thread. Owner/admin commands or approval authorize provider mutations. PostgreSQL does not store graph checkpoints, basket items or authoritative order state; background workflow-status synchronization is deferred.
 
 ## 8. Memory Design
 
@@ -280,7 +277,7 @@ Actual tool names and schemas must be discovered through `tools/list`.
 
 ### Safety rule
 
-Read operations may run automatically. Any operation that changes the real Silpo basket requires explicit owner approval.
+Read operations may run automatically. A provider mutation requires an authenticated owner/admin command or their explicit approval of another member's request.
 
 ## 10. Authentication
 
@@ -297,7 +294,7 @@ Users authenticate with the MiyKo backend. The backend determines:
 
 ### Silpo authorization
 
-Each connected Silpo account uses the provider's supported MCP authentication flow. The MVP uses Silpo login credentials at connection time.
+Each connected Silpo account uses OAuth 2.1 Authorization Code + PKCE through the MCP transport. The owner signs in on the Silpo authorization page; MiyKo must never collect the owner's Silpo password.
 
 Silpo access and refresh tokens:
 
@@ -317,7 +314,7 @@ Hono API — TypeScript
         ├── authentication
         ├── household management
         ├── invitations and roles
-        ├── LangGraph Cloud client and thin projection
+        ├── LangGraph Agent Server client and thin projection
         ├── provider authentication adapters
         └── outbox worker
                  ↓
@@ -330,7 +327,7 @@ Hono API — TypeScript
 
 - **Mobile:** Expo, React Native, TypeScript.
 - **Backend:** Hono, TypeScript.
-- **Agent Layer:** LangChain/LangGraph Cloud with LangSmith tracing.
+- **Agent Layer:** LangChain/LangGraph Agent Server with local structured execution logs.
 - **Long-term memory:** Mem0 Cloud.
 - **Database:** PostgreSQL.
 - **MCP:** official Model Context Protocol TypeScript client.
@@ -406,7 +403,7 @@ Follow-up notifications are deferred from the core MVP. If enabled later, a noti
 | ---------------------------------------- | --------------------------------------------------------------------------------- |
 | Incorrect memory inference               | Show memories as editable and request confirmation for important restrictions     |
 | Stale product availability or local projection | Treat cached/projection data as informational and revalidate through MCP before cart update |
-| Unauthorized basket changes              | Require owner approval and backend permission checks                              |
+| Unauthorized basket changes              | Require owner/admin authorization and backend permission checks                    |
 | Sensitive receipt data in cloud services | Minimize payloads and avoid storing provider credentials in Mem0 |
 | Mem0 retrieval limit                     | Batch receipt ingestion and retrieve memory once per major workflow stage         |
 | Workflow becomes too broad               | Demonstrate one strong dinner-to-basket-to-follow-up scenario                     |

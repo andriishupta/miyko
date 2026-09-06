@@ -5,13 +5,14 @@ export type ISODateString = string;
 export type AccountStatus = "active" | "suspended" | "deactivated";
 export type ProviderStatus = "active" | "inactive";
 export type ProviderCapability = string;
-export type ProviderAuthMethod = "mcp";
 export type ProviderAccountStatus = "active" | "expired" | "revoked" | "reconnect_required";
 export type HouseholdRole = "owner" | "admin" | "editor" | "viewer";
 export type MembershipStatus = "active" | "removed";
 export type InvitationStatus = "pending" | "accepted" | "declined" | "expired" | "revoked";
 export type WorkflowStatus = "pending" | "running" | "interrupted" | "succeeded" | "failed" | "cancelled";
 export type WorkflowProvider = "langgraph";
+export const WORKFLOW_KIND = { stepOrder: "step-order" } as const;
+export type WorkflowKind = typeof WORKFLOW_KIND[keyof typeof WORKFLOW_KIND];
 export type WorkflowApprovalAction = "provider_action" | "fulfillment" | "delivery_slot";
 export type ApprovalStatus = "pending" | "approved" | "declined";
 export type OutboxStatus = "pending" | "processing" | "published" | "retrying" | "dead_letter";
@@ -34,20 +35,7 @@ export type Provider = {
   status: ProviderStatus;
   capabilities: ProviderCapability[];
 };
-export type UserProviderAccount = {
-  id: UUID;
-  providerId: UUID;
-  providerSubject: string | null;
-  accountLogin: string | null;
-  authMethod: ProviderAuthMethod;
-  status: ProviderAccountStatus;
-  scopes: string[];
-  accessTokenExpiresAt: ISODateString | null;
-  refreshTokenExpiresAt: ISODateString | null;
-  lastUsedAt: ISODateString | null;
-};
-export type ProviderAuthRequest = { login: string; password: string };
-export type ProviderConnectionResponse = { provider: Provider; account: UserProviderAccount };
+export type ProviderOAuthStartResponse = { authorizationUrl: string; returnUrl: string };
 export type HouseholdProviderConnection = {
   id: UUID;
   providerId: UUID;
@@ -85,6 +73,7 @@ export type Workflow = {
   householdId: UUID;
   startedByMemberId: UUID;
   providerId: UUID;
+  workflowKind: WorkflowKind;
   status: WorkflowStatus;
   workflowProvider: WorkflowProvider;
   threadId: string;
@@ -105,9 +94,20 @@ export type WorkflowAction =
   | { type: "delivery_slot_selected"; scheduledFrom: ISODateString; scheduledTo: ISODateString }
   | { type: "approve"; approvalId: UUID }
   | { type: "decline"; approvalId: UUID };
-export type CreateWorkflowRequest = { text: string; providerSlug?: string; source?: "text" | "audio" };
+export type CreateWorkflowRequest = { text: string; providerSlug?: string; workflowKind?: WorkflowKind; source?: "text" | "audio" };
 export type WorkflowActionRequest = WorkflowAction;
 export type WorkflowResponse = { workflow: Workflow };
+export type WorkflowViewItem = { name: string; quantity: string | null; price: number | null; imageUrl: string | null };
+export type WorkflowView = {
+  phase: "collecting" | "approval_required" | "basket_ready" | "ready_for_checkout" | "completed";
+  summary: string;
+  plannedRequests: Array<{ memberId: UUID; text: string }>;
+  items: WorkflowViewItem[];
+  total: number | null;
+  currency: string | null;
+  checkoutUrl: string | null;
+};
+export type WorkflowViewResponse = { view: WorkflowView };
 
 export type OutboxEvent = { id: UUID; householdId: UUID; aggregateType: string; aggregateId: UUID; eventType: string; version: number; status: OutboxStatus; attempts: number; processedAt: ISODateString | null; lastError: string | null; createdAt: ISODateString };
 

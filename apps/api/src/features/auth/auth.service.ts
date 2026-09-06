@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { and, eq, isNull, sql } from 'drizzle-orm'
 import { householdMembers, userSessions, users } from '@miyko/database/schema'
 import type { AuthUser, LoginResponse, RegisterRequest } from '@miyko/contracts'
@@ -6,10 +6,9 @@ import { db, withRlsContext } from '../../lib/database.js'
 import { conflict, unauthorized } from '../../lib/errors.js'
 import { toContractUser } from '../../lib/serializers.js'
 import { hashPassword, verifyPassword } from '../../lib/password.js'
+import { sha256 } from '../../lib/crypto.js'
 
 const SESSION_DAYS = 30
-
-export const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
 
 type AuthUserLookup = {
   id: string

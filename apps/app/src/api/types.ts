@@ -9,9 +9,9 @@ import type {
   LoginResponse,
   Provider,
   ProviderConnectionsResponse,
-  ProviderConnectionResponse,
   RegisterRequest,
   Workflow,
+  WorkflowView,
 } from "@miyko/contracts";
 
 export type AppSession = Pick<LoginResponse, "accessToken" | "user" | "householdId">;
@@ -22,9 +22,9 @@ export type ApiInvitation = HouseholdInvitation;
 export type ApiInvitationCreateResponse = InvitationCreateResponse;
 export type ApiProvider = Provider;
 export type ApiProviderConnectionsResponse = ProviderConnectionsResponse;
-export type ApiProviderConnectionResponse = ProviderConnectionResponse;
 export type ApiAudioProcessResponse = AudioProcessResponse;
 export type ApiWorkflow = Workflow;
+export type ApiWorkflowView = WorkflowView;
 export type ApiMemoryStatus = {
   provider: string;
   managed: boolean;

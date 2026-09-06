@@ -1,6 +1,6 @@
 # MiyKo architecture
 
-The deployed graph setup and API payload contract are documented in [graph.md](graph.md) and [graph-contract.md](graph-contract.md).
+The local/deployed graph setup and API payload contract are documented in [graph.md](graph.md) and [graph-contract.md](graph-contract.md).
 
 ## Ownership rule
 
@@ -10,29 +10,31 @@ MiyKo is a household control plane around managed agent workflows. It does not b
 | --- | --- |
 | Authentication, household membership and roles | MiyKo API + PostgreSQL |
 | Owner provider credentials and household provider binding | MiyKo API + PostgreSQL |
-| Workflow state, messages, recipe generation, basket and pause/resume | LangGraph Cloud |
+| Workflow state, messages, recipe generation, basket and pause/resume | LangGraph Agent Server (local MVP, hosted later) |
 | Long-term household/member memory | Mem0 Cloud |
 | Products, images, basket mutation, fulfillment and order details | Silpo MCP/provider |
 | Retryable delivery of API side effects | MiyKo outbox worker |
 
-PostgreSQL stores only a small control-plane projection: the household, provider binding, deterministic workflow/thread ID, last observed run/status, external basket/order IDs and approval decisions. The projection is not the source of truth for provider or workflow state; LangGraph Cloud and the provider are.
+PostgreSQL stores only a small control-plane projection: the household, provider binding, workflow kind, deterministic workflow/thread ID, last observed run/status, external basket/order IDs and approval decisions. The projection is not the source of truth for provider or workflow state; LangGraph Agent Server and the provider are.
 
 ## High-level flow
 
 ```text
 login/register
   → create or join household
-  → household owner connects a store provider once
+  → household owner connects a store provider once in the provider OAuth browser
   → create one workflow for the request
   → LangGraph uses Mem0 context and reads current Silpo MCP state
   → graph pauses for a replacement, fulfillment mode, delivery slot or provider action
   → household member requests approval
-  → owner approves or declines
+  → owner or admin approves or declines
   → same LangGraph thread resumes
-  → only then does MCP mutate the basket or finish the order
+  → only then does MCP mutate the basket and return the checkout link
 ```
 
 The initial request is a normal workflow input. “Add ice cream” is a workflow action, not a local product search. The graph/provider resolves the item and returns the current basket. MiyKo only records that an approval was requested and whether the owner approved it.
+
+The MVP workflow kind is `step-order`. Additional workflow kinds must be added to the closed contract enum and server-side LangGraph registry; they do not require a second control-plane architecture.
 
 A member action is not itself an approval decision. The API forwards the action to the same LangGraph thread; an approval projection is created only when LangGraph returns an interrupt that requires household approval.
 
@@ -48,19 +50,19 @@ The API has five responsibilities:
 2. enforce household membership and role permissions;
 3. create a deterministic workflow reference;
 4. record approval/decline decisions, update the thin projection and enqueue actions;
-5. retry delivery of those actions to LangGraph Cloud.
+5. retry delivery of those actions to LangGraph Agent Server.
 
 The API does not interpret recipes, normalize provider products, maintain meal plans, copy basket items, import receipts or treat its projection/cache as external truth. Future webhooks/status reads may refresh the thin projection, but that is not part of the MVP.
 
 ## Provider boundary
 
-`StoreProvider` is intentionally small: authentication and reauthorization. `user_providers` and `provider_secrets` hold the owner’s encrypted provider credentials; `connected_provider_accounts` is the single household-scoped binding that points to those credentials and records which member authorized it. `StoreProviderService` owns provider lookup, owner account persistence, encrypted secrets and household binding. Members use the existing household binding and do not reconnect the provider. Tool discovery, product search, basket updates and fulfillment are MCP operations invoked from the managed workflow after authorization; they are not mobile API methods.
+`StoreProvider` is intentionally small: start and finish OAuth authorization. MiyKo email/password is only application authentication; it is never sent to Silpo. `provider_oauth_sessions` temporarily holds hashed OAuth state plus encrypted PKCE/DCR context until callback completion. `user_providers` and `provider_secrets` then hold the owner’s encrypted provider credentials; `connected_provider_accounts` is the single household-scoped binding that points to those credentials and records which member authorized it. Server-side RLS permits an active household member to use an encrypted secret only through that active binding; no provider credential is returned by a public API. Members do not reconnect the provider. On every graph start/resume, the API resolves that binding and passes the access token as runtime-only LangGraph context, not checkpointed workflow state or Mem0 memory. Tool discovery, product search, basket updates and fulfillment remain MCP operations invoked by the workflow.
 
 The provider registry remains useful because it resolves provider-specific authentication/MCP wiring by slug. Adding another store should not change household, workflow or approval tables.
 
 ## Durable workflow boundary
 
-`workflows.id` is generated before the first outbox event and is reused as the LangGraph `thread_id`. The API stores `run_id` and the latest status returned after start/resume. `workflow_approvals` stores only:
+`workflows.id` is generated before the first outbox event and is reused as the LangGraph `thread_id`. `workflows.workflow_kind` selects the local or deployed graph from the server-side workflow registry and remains stable for the life of the thread. The API stores `run_id` and the latest status returned after start/resume. `workflow_approvals` stores only:
 
 - which workflow requested an action;
 - the external request ID, if the graph supplied one;
@@ -79,7 +81,7 @@ The baseline contains only:
 
 - `users`, `user_sessions`;
 - `households`, `household_members`, `household_invitations`;
-- `providers`, `user_providers`, `provider_secrets`, `connected_provider_accounts`;
+- `providers`, `user_providers`, `provider_secrets`, `connected_provider_accounts`, transient `provider_oauth_sessions`;
 - `workflows`, `workflow_approvals`, `outbox_events`, `audit_logs`.
 
 The removed tables are intentional: `food_intents`, `planning_runs`, `meal_plans`, `meal_plan_items`, `provider_products`, product replacements, local proposals/items, local orders/items, deliveries, feedback and provider/memory sync records.

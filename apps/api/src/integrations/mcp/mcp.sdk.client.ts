@@ -1,89 +1,75 @@
-import { Client } from '@modelcontextprotocol/client'
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
-import { StdioClientTransport } from '@modelcontextprotocol/client/stdio'
+import {
+  StreamableHTTPClientTransport,
+  auth,
+  type OAuthClientMetadata,
+  type OAuthClientProvider,
+  type StoredOAuthClientInformation,
+  type StoredOAuthTokens,
+} from '@modelcontextprotocol/client'
 import { AppError } from '../../lib/errors.js'
 import { mcpConfig } from './mcp.config.js'
-import type { McpClient, ProviderLoginInput } from './mcp.client.js'
+import type { McpClient, McpOAuthSession } from './mcp.client.js'
 
-type JsonRecord = Record<string, unknown>
+class SessionOAuthProvider implements OAuthClientProvider {
+  authorizationUrl?: string
 
-const sdkResultPayload = (result: unknown): unknown => {
-  if (!result || typeof result !== 'object') throw new AppError('MCP_INVALID_RESPONSE', 'MCP returned an invalid response', 502)
-  const record = result as JsonRecord
-  if (record.isError === true) {
-    const details = JSON.stringify(record.structuredContent ?? record.content ?? '')
-    if (/unauthori[sz]|expired|invalid token/i.test(details)) throw new AppError('MCP_AUTH_EXPIRED', 'MCP authorization expired', 401)
-    throw new AppError('MCP_TOOL_ERROR', 'MCP tool execution failed', 502)
-  }
+  constructor(
+    private readonly session: McpOAuthSession,
+    readonly redirectUrl: string,
+  ) {}
 
-  const structuredContent = record.structuredContent
-  if (structuredContent !== undefined) return structuredContent
-
-  const content = record.content
-  if (!Array.isArray(content)) throw new AppError('MCP_INVALID_RESPONSE', 'MCP response content is invalid', 502)
-  const textBlock = content.find((item): item is JsonRecord => Boolean(item && typeof item === 'object' && (item as JsonRecord).type === 'text' && typeof (item as JsonRecord).text === 'string'))
-  if (!textBlock) throw new AppError('MCP_INVALID_RESPONSE', 'MCP response has no structured content', 502)
-  try {
-    const parsed: unknown = JSON.parse(textBlock.text as string)
-    return parsed
-  } catch {
-    throw new AppError('MCP_INVALID_RESPONSE', 'MCP response content is not valid JSON', 502)
-  }
-}
-
-const requiredTool = (name: string | undefined): string => {
-  if (!name) throw new AppError('MCP_TOOL_NOT_CONFIGURED', 'Required MCP tool is not configured', 503)
-  return name
-}
-
-const environment = (): Record<string, string> => Object.fromEntries(
-  mcpConfig.envKeys
-    .map((key) => [key, process.env[key]] as const)
-    .filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
-)
-
-export class SdkMcpClient implements McpClient {
-  private async withClient<T>(accessToken: string | null, work: (client: Client) => Promise<T>): Promise<T> {
-    if (!mcpConfig.serverUrl && !mcpConfig.command) throw new AppError('MCP_CONFIGURATION_REQUIRED', 'MCP server configuration is required', 503)
-    if (mcpConfig.serverUrl && mcpConfig.command) throw new AppError('MCP_CONFIGURATION_INVALID', 'Configure one MCP transport', 503)
-
-    const client = new Client({ name: 'miyko-api', version: '1.0.0' })
-    const transport = mcpConfig.serverUrl
-      ? new StreamableHTTPClientTransport(new URL(mcpConfig.serverUrl), {
-          fetch: async (input, init) => {
-            const headers = new Headers(init?.headers)
-            if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
-            return fetch(input, { ...init, headers })
-          },
-        })
-      : new StdioClientTransport({ command: mcpConfig.command!, args: mcpConfig.args, env: environment() })
-
-    let connected = false
-    try {
-      await client.connect(transport)
-      connected = true
-      return await work(client)
-    } catch (error) {
-      const status = error && typeof error === 'object' && 'status' in error ? error.status : undefined
-      if (status === 401 || status === 403) throw new AppError('MCP_AUTH_EXPIRED', 'MCP authorization expired', 401)
-      throw error
-    } finally {
-      if (connected) await client.close()
+  get clientMetadata(): OAuthClientMetadata {
+    return {
+      redirect_uris: [this.redirectUrl],
+      token_endpoint_auth_method: 'none',
+      grant_types: ['authorization_code', 'refresh_token'],
+      response_types: ['code'],
+      client_name: 'MiyKo',
+      software_id: 'miyko',
+      software_version: '1.0.0',
     }
   }
 
-  private call(toolName: string | undefined, args: JsonRecord, accessToken: string | null) {
-    return this.withClient(accessToken, async (client) => sdkResultPayload(await client.callTool({ name: requiredTool(toolName), arguments: args })))
+  state() { return this.session.state }
+  clientInformation() { return this.session.clientInformation }
+  saveClientInformation(value: StoredOAuthClientInformation) { this.session.clientInformation = value }
+  tokens() { return this.session.tokens }
+  saveTokens(value: StoredOAuthTokens) { this.session.tokens = value }
+  redirectToAuthorization(url: URL) { this.authorizationUrl = url.toString() }
+  saveCodeVerifier(value: string) { this.session.codeVerifier = value }
+  codeVerifier() {
+    if (!this.session.codeVerifier) throw new AppError('PROVIDER_OAUTH_INVALID', 'Provider authorization session is invalid', 400)
+    return this.session.codeVerifier
+  }
+}
+
+export class SdkMcpClient implements McpClient {
+  async startAuthorization(input: { state: string; redirectUri: string }) {
+    const config = mcpConfig()
+    const session: McpOAuthSession = { state: input.state }
+    const provider = new SessionOAuthProvider(session, input.redirectUri)
+    const result = await auth(provider, { serverUrl: config.serverUrl })
+    if (result !== 'REDIRECT' || !provider.authorizationUrl) {
+      throw new AppError('PROVIDER_OAUTH_INVALID', 'Provider did not start browser authorization', 502)
+    }
+    return { authorizationUrl: provider.authorizationUrl, session }
   }
 
-  authenticate(input: ProviderLoginInput) {
-    return this.call(mcpConfig.toolNames.authenticate, { login: input.login, password: input.password }, null)
-  }
+  async finishAuthorization(session: McpOAuthSession, callbackParams: URLSearchParams, redirectUri: string) {
+    if (callbackParams.get('state') !== session.state) {
+      throw new AppError('PROVIDER_OAUTH_INVALID', 'Provider authorization state is invalid', 400)
+    }
+    if (callbackParams.has('error')) {
+      throw new AppError('PROVIDER_OAUTH_DENIED', 'Provider authorization was declined', 400)
+    }
 
-  reauthorize(input: { refreshToken: string }) {
-    return this.call(mcpConfig.toolNames.reauthorize, { refreshToken: input.refreshToken }, null)
+    const provider = new SessionOAuthProvider(session, redirectUri)
+    const transport = new StreamableHTTPClientTransport(new URL(mcpConfig().serverUrl), { authProvider: provider })
+    await transport.finishAuth(callbackParams)
+    const tokens = provider.tokens()
+    if (!tokens) throw new AppError('PROVIDER_OAUTH_INVALID', 'Provider did not return OAuth tokens', 502)
+    return { tokens, session }
   }
-
 }
 
 export const sdkMcpClient = new SdkMcpClient()

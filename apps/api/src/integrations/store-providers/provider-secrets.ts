@@ -23,7 +23,7 @@ const encryptionKey = () => {
   return key
 }
 
-const encode = (value: string): string => {
+export const encryptProviderValue = (value: string): string => {
   const nonce = randomBytes(12)
   const cipher = createCipheriv(algorithm, encryptionKey(), nonce)
   const encrypted = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()])
@@ -35,7 +35,7 @@ const encode = (value: string): string => {
   } satisfies EncryptedValue)
 }
 
-const decode = (value: string): string => {
+export const decryptProviderValue = (value: string): string => {
   try {
     const payload = JSON.parse(value) as Partial<EncryptedValue>
     if (payload.version !== 'v1' || !payload.nonce || !payload.tag || !payload.value) throw new Error('invalid payload')
@@ -51,16 +51,16 @@ const decode = (value: string): string => {
 export const providerSecretCrypto = {
   put(value: ProviderSecret) {
     return {
-      accessTokenReference: encode(value.accessToken),
-      refreshTokenReference: value.refreshToken ? encode(value.refreshToken) : null,
+      accessTokenReference: encryptProviderValue(value.accessToken),
+      refreshTokenReference: value.refreshToken ? encryptProviderValue(value.refreshToken) : null,
     }
   },
 
   get(accessTokenReference: string | null, refreshTokenReference: string | null) {
     if (!accessTokenReference) return null
     return {
-      accessToken: decode(accessTokenReference),
-      refreshToken: refreshTokenReference ? decode(refreshTokenReference) : null,
+      accessToken: decryptProviderValue(accessTokenReference),
+      refreshToken: refreshTokenReference ? decryptProviderValue(refreshTokenReference) : null,
     }
   },
 

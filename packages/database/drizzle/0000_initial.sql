@@ -5,10 +5,11 @@ CREATE TYPE public.household_role AS ENUM ('owner', 'admin', 'editor', 'viewer')
 CREATE TYPE public.membership_status AS ENUM ('active', 'removed');
 CREATE TYPE public.invitation_status AS ENUM ('pending', 'accepted', 'declined', 'expired', 'revoked');
 CREATE TYPE public.provider_status AS ENUM ('active', 'inactive');
-CREATE TYPE public.provider_auth_method AS ENUM ('mcp');
+CREATE TYPE public.provider_auth_method AS ENUM ('oauth');
 CREATE TYPE public.provider_account_status AS ENUM ('active', 'expired', 'revoked', 'reconnect_required');
 CREATE TYPE public.provider_secret_kind AS ENUM ('access_token', 'refresh_token');
 CREATE TYPE public.workflow_status AS ENUM ('pending', 'running', 'interrupted', 'succeeded', 'failed', 'cancelled');
+CREATE TYPE public.workflow_kind AS ENUM ('step-order');
 CREATE TYPE public.approval_status AS ENUM ('pending', 'approved', 'declined');
 CREATE TYPE public.workflow_action AS ENUM ('provider_action', 'fulfillment', 'delivery_slot');
 CREATE TYPE public.outbox_status AS ENUM ('pending', 'processing', 'published', 'retrying', 'dead_letter');
@@ -124,11 +125,26 @@ CREATE TABLE public.connected_provider_accounts (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE public.provider_oauth_sessions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  household_id uuid NOT NULL REFERENCES public.households(id) ON DELETE CASCADE,
+  member_id uuid NOT NULL REFERENCES public.household_members(id) ON DELETE CASCADE,
+  provider_id uuid NOT NULL REFERENCES public.providers(id) ON DELETE CASCADE,
+  state_hash varchar(64) NOT NULL,
+  encrypted_session bytea NOT NULL,
+  expires_at timestamptz NOT NULL,
+  completed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE public.workflows (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   household_id uuid NOT NULL REFERENCES public.households(id) ON DELETE CASCADE,
   started_by_member_id uuid NOT NULL REFERENCES public.household_members(id) ON DELETE RESTRICT,
   provider_id uuid NOT NULL REFERENCES public.providers(id) ON DELETE RESTRICT,
+  workflow_kind public.workflow_kind NOT NULL DEFAULT 'step-order',
   status public.workflow_status NOT NULL DEFAULT 'pending',
   thread_id varchar(255) NOT NULL,
   run_id varchar(255),
@@ -207,6 +223,8 @@ CREATE INDEX user_providers_user_status_idx ON public.user_providers (user_id, s
 CREATE UNIQUE INDEX provider_secrets_account_kind_uq ON public.provider_secrets (user_provider_account_id, kind);
 CREATE UNIQUE INDEX connected_provider_accounts_household_provider_uq ON public.connected_provider_accounts (household_id, provider_id);
 CREATE INDEX connected_provider_accounts_household_status_idx ON public.connected_provider_accounts (household_id, status);
+CREATE UNIQUE INDEX provider_oauth_sessions_state_hash_uq ON public.provider_oauth_sessions (state_hash);
+CREATE INDEX provider_oauth_sessions_expiry_idx ON public.provider_oauth_sessions (expires_at);
 CREATE UNIQUE INDEX workflows_thread_uq ON public.workflows (thread_id);
 CREATE INDEX workflows_household_status_idx ON public.workflows (household_id, status);
 CREATE INDEX workflow_approvals_workflow_status_idx ON public.workflow_approvals (workflow_id, status);
@@ -245,6 +263,11 @@ CREATE OR REPLACE FUNCTION public.miyko_auth_find_session(target_token_hash text
 RETURNS TABLE (session_id uuid, user_id uuid, expires_at timestamptz, revoked_at timestamptz, last_used_at timestamptz)
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog
 AS $$ SELECT s.id, s.user_id, s.expires_at, s.revoked_at, s.last_used_at FROM public.user_sessions s WHERE s.token_hash = target_token_hash AND s.revoked_at IS NULL AND s.expires_at > now() LIMIT 1 $$;
+
+CREATE OR REPLACE FUNCTION public.miyko_provider_oauth_find_session(target_state_hash varchar)
+RETURNS TABLE (session_id uuid, user_id uuid)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog
+AS $$ SELECT session.id, session.user_id FROM public.provider_oauth_sessions session WHERE session.state_hash = target_state_hash AND session.completed_at IS NULL AND session.expires_at > now() LIMIT 1 $$;
 
 CREATE OR REPLACE FUNCTION public.miyko_auth_create_user(target_email varchar, target_normalized_email varchar, target_password_hash text, target_first_name varchar, target_last_name varchar, target_display_name varchar)
 RETURNS TABLE (id uuid, email varchar, normalized_email varchar, password_hash text, first_name varchar, last_name varchar, display_name varchar, status public.account_status, last_login_at timestamptz)
@@ -349,6 +372,7 @@ ALTER TABLE public.providers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_providers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.provider_secrets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.connected_provider_accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.provider_oauth_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.workflows ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.workflow_approvals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.outbox_events ENABLE ROW LEVEL SECURITY;
@@ -390,10 +414,15 @@ CREATE POLICY user_providers_insert_own ON public.user_providers FOR INSERT WITH
 CREATE POLICY user_providers_update_own ON public.user_providers FOR UPDATE USING (user_id = public.miyko_current_user_id()) WITH CHECK (user_id = public.miyko_current_user_id());
 CREATE POLICY user_providers_delete_own ON public.user_providers FOR DELETE USING (user_id = public.miyko_current_user_id());
 
-CREATE POLICY provider_secrets_select_own ON public.provider_secrets FOR SELECT USING (EXISTS (SELECT 1 FROM public.user_providers account WHERE account.id = user_provider_account_id AND account.user_id = public.miyko_current_user_id()));
+CREATE POLICY provider_secrets_select_bound_household ON public.provider_secrets FOR SELECT USING (EXISTS (SELECT 1 FROM public.user_providers account WHERE account.id = user_provider_account_id AND account.user_id = public.miyko_current_user_id()) OR EXISTS (SELECT 1 FROM public.connected_provider_accounts connection WHERE connection.user_provider_account_id = user_provider_account_id AND connection.status = 'active' AND public.miyko_is_household_member(connection.household_id)));
 CREATE POLICY provider_secrets_insert_own ON public.provider_secrets FOR INSERT WITH CHECK (EXISTS (SELECT 1 FROM public.user_providers account WHERE account.id = user_provider_account_id AND account.user_id = public.miyko_current_user_id()));
 CREATE POLICY provider_secrets_update_own ON public.provider_secrets FOR UPDATE USING (EXISTS (SELECT 1 FROM public.user_providers account WHERE account.id = user_provider_account_id AND account.user_id = public.miyko_current_user_id())) WITH CHECK (EXISTS (SELECT 1 FROM public.user_providers account WHERE account.id = user_provider_account_id AND account.user_id = public.miyko_current_user_id()));
 CREATE POLICY provider_secrets_delete_own ON public.provider_secrets FOR DELETE USING (EXISTS (SELECT 1 FROM public.user_providers account WHERE account.id = user_provider_account_id AND account.user_id = public.miyko_current_user_id()));
+
+CREATE POLICY provider_oauth_sessions_select_own ON public.provider_oauth_sessions FOR SELECT USING (user_id = public.miyko_current_user_id());
+CREATE POLICY provider_oauth_sessions_insert_own ON public.provider_oauth_sessions FOR INSERT WITH CHECK (user_id = public.miyko_current_user_id());
+CREATE POLICY provider_oauth_sessions_update_own ON public.provider_oauth_sessions FOR UPDATE USING (user_id = public.miyko_current_user_id()) WITH CHECK (user_id = public.miyko_current_user_id());
+CREATE POLICY provider_oauth_sessions_delete_own ON public.provider_oauth_sessions FOR DELETE USING (user_id = public.miyko_current_user_id());
 
 GRANT USAGE ON SCHEMA public TO api_role;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO api_role;
@@ -405,6 +434,7 @@ REVOKE ALL ON FUNCTION public.miyko_can_bootstrap_household(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.miyko_can_accept_household_invitation(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.miyko_auth_find_user_by_email(varchar) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.miyko_auth_find_session(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.miyko_provider_oauth_find_session(varchar) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.miyko_auth_create_user(varchar, varchar, text, varchar, varchar, varchar) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.miyko_auth_create_session(uuid, text, timestamptz) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.miyko_claim_outbox_events(varchar, integer, integer) FROM PUBLIC;
@@ -415,6 +445,7 @@ GRANT EXECUTE ON FUNCTION public.miyko_can_bootstrap_household(uuid) TO api_role
 GRANT EXECUTE ON FUNCTION public.miyko_can_accept_household_invitation(uuid) TO api_role;
 GRANT EXECUTE ON FUNCTION public.miyko_auth_find_user_by_email(varchar) TO api_role;
 GRANT EXECUTE ON FUNCTION public.miyko_auth_find_session(text) TO api_role;
+GRANT EXECUTE ON FUNCTION public.miyko_provider_oauth_find_session(varchar) TO api_role;
 GRANT EXECUTE ON FUNCTION public.miyko_auth_create_user(varchar, varchar, text, varchar, varchar, varchar) TO api_role;
 GRANT EXECUTE ON FUNCTION public.miyko_auth_create_session(uuid, text, timestamptz) TO api_role;
 GRANT EXECUTE ON FUNCTION public.miyko_claim_outbox_events(varchar, integer, integer) TO api_role;

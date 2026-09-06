@@ -1,0 +1,22 @@
+{
+  "name": "@miyko/workflows",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "langgraphjs dev",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@langchain/langgraph": "^1.4.14",
+    "@langchain/mcp-adapters": "^1.1.4",
+    "@langchain/openai": "^1.5.11",
+    "langchain": "^1.5.10",
+    "mem0ai": "^3.1.7",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@langchain/langgraph-cli": "^1.4.5",
+    "@types/node": "^26.4.0",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,17 +1,17 @@
-import type { ProviderAuthRequest } from "@miyko/contracts";
+import type { McpOAuthSession } from '../mcp/mcp.client.js'
 
 export type ProviderTokenSet = {
-  providerSubject: string | null;
-  accountLogin: string | null;
-  accessToken: string;
-  refreshToken: string | null;
-  accessTokenExpiresAt: Date | null;
-  refreshTokenExpiresAt: Date | null;
-  scopes: string[];
-};
+  providerSubject: string | null
+  accountLogin: string | null
+  accessToken: string
+  refreshToken: string | null
+  accessTokenExpiresAt: Date | null
+  refreshTokenExpiresAt: Date | null
+  scopes: string[]
+}
 
-/** Provider authorization only. LangGraph/MCP owns tool discovery, basket and product data. */
+/** Provider authorization only. LangGraph/MCP owns tools, basket and product data. */
 export interface StoreProvider {
-  authenticate(input: ProviderAuthRequest): Promise<ProviderTokenSet>;
-  reauthorize(input: { refreshToken: string }): Promise<ProviderTokenSet>;
+  startAuthorization(state: string): Promise<{ authorizationUrl: string; session: McpOAuthSession }>
+  finishAuthorization(session: McpOAuthSession, callbackParams: URLSearchParams): Promise<ProviderTokenSet>
 }

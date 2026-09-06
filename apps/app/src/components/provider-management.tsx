@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import * as WebBrowser from 'expo-web-browser';
 import { ActivityIndicator, Divider } from 'react-native-paper';
 import { View } from 'react-native';
 
 import { api, ApiError } from '@/api/client';
 import type { ApiProvider, ApiProviderConnectionsResponse } from '@/api/types';
-import { Field, MiykoText, PrimaryButton, SecondaryButton, StatusPill, Surface } from '@/components/miyko-ui';
+import { MiykoText, PrimaryButton, SecondaryButton, StatusPill, Surface } from '@/components/miyko-ui';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useOptionalProviderStatus } from '@/providers/provider-status-context';
@@ -21,8 +22,6 @@ export function ProviderManagement({ onComplete }: ProviderManagementProps) {
   const [isOwner, setIsOwner] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
-  const [login, setLogin] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -66,22 +65,20 @@ export function ProviderManagement({ onComplete }: ProviderManagementProps) {
   }
 
   async function connectProvider(provider: ApiProvider) {
-    const connection = connectionsByProvider.get(provider.slug);
-    if (!login.trim() || !password || activeSlug) {
-      setError('Enter the provider login and password.');
-      return;
-    }
+    if (activeSlug) return;
 
     const completed = await runProviderAction(provider, async () => {
-      if (connection && connection.status !== 'active') {
-        await api.providers.reauthorize(provider.slug, { login: login.trim(), password });
-      } else {
-        await api.providers.connect(provider.slug, { login: login.trim(), password });
+      const authorization = await api.providers.startAuthorization(provider.slug);
+      const result = await WebBrowser.openAuthSessionAsync(authorization.authorizationUrl, authorization.returnUrl);
+      if (result.type !== 'success' || new URL(result.url).searchParams.get('providerOAuth') !== 'connected') {
+        throw new ApiError('Provider authorization was not completed.', 400, 'PROVIDER_OAUTH_INCOMPLETE');
       }
-      setLogin('');
-      setPassword('');
-      await load();
-    }, `Could not connect ${provider.name}.`);
+      const connectionResponse = await api.providers.connections();
+      if (!connectionResponse.items.some((connection) => connection.provider.slug === provider.slug && connection.status === 'active')) {
+        throw new ApiError('Provider connection was not created.', 409, 'PROVIDER_CONNECTION_MISSING');
+      }
+      setConnections(connectionResponse.items);
+    }, `Could not connect ${provider.name}.`, `${provider.name} is connected for this household.`);
     if (completed) onComplete?.();
   }
 
@@ -121,8 +118,7 @@ export function ProviderManagement({ onComplete }: ProviderManagementProps) {
               <MiykoText variant="body" color="textSecondary">The household owner must connect this provider.</MiykoText>
             ) : (
               <View style={{ gap: Spacing.two }}>
-                <Field label="PROVIDER LOGIN" placeholder="Email or phone" value={login} onChangeText={setLogin} />
-                <Field label="PROVIDER PASSWORD" placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
+                <MiykoText variant="body" color="textSecondary">Sign in securely in the provider browser. MiyKo never receives your provider password.</MiykoText>
                 <PrimaryButton label={connection ? 'Reconnect provider' : 'Connect provider'} loading={isBusy} onPress={() => void connectProvider(provider)} icon="cart" />
               </View>
             )}

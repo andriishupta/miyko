@@ -1,47 +1,45 @@
 # MiyKo graph contract
 
-This is the integration contract between the MiyKo API and the deployed LangGraph assistants. The graph owns durable state; the API owns identity, permissions, approval records, outbox delivery and a thin last-observed projection.
+## Registry
 
-## Graphs
+| Workflow kind / graph slug | Purpose |
+| --- | --- |
+| `step-order` | Multi-member household plan that becomes a real provider basket |
 
-| Graph | Purpose | Provider writes |
-| --- | --- | --- |
-| `workflow` | Primary provider-backed request workflow | Allowed only after owner approval |
-
-The API chooses the assistant/deployment through configuration, not by accepting a graph name from the mobile client.
+The slug is code, not an environment variable. Add future workflows to the shared contract enum and API registry.
 
 ## Start input
 
-The API sends one start input to the selected assistant:
-
 ```ts
-type GraphStartInput = {
+type StepOrderInput = {
   operation: "workflow.start";
   workflowId: string;
+  workflowKind: "step-order";
   householdId: string;
   memberId: string;
-  providerSlug?: string;
+  memberRole: "owner" | "admin" | "editor" | "viewer";
+  text: string;
+  providerSlug: string;
   source: "text" | "audio";
   eventId: string;
-  text: string;
-  memory: {
-    householdNamespace: string;
-    memberNamespace: string;
-  };
+  memory: { householdNamespace: string; memberNamespace: string };
 };
 ```
 
-`workflowId` is the MiyKo UUID and the LangGraph `thread_id`. `eventId` is the outbox event ID used for run idempotency and tracing. The graph must treat it as a correlation ID, not as user content.
-`providerSlug` identifies the provider already connected to the household. The graph must use that household binding and owner-authorized provider access; it must not ask the requesting member for provider credentials.
-`memory.householdNamespace` and `memory.memberNamespace` are the managed Mem0 identifiers. Use them for memory reads and writes; do not create a local memory namespace or database record.
+`workflowId` is also the LangGraph `thread_id`. The API creates it before publishing `workflow.started`.
+
+## Runtime context
+
+Every start and resume includes `{ providerAccessToken: string }` as LangGraph runtime context. The API resolves it from the active household binding immediately before creating the run. It is deliberately absent from start input, thread metadata, graph state, Mem0 and public contracts.
 
 ## Resume input
 
-Every action resumes the existing thread:
+The graph waits with a non-approval `workflow_action` interrupt. The API resumes the same thread with trusted actor data:
 
 ```ts
-type GraphResume = {
+type ResumeInput = {
   eventId: string;
+  actor: { memberId: string; role: "owner" | "admin" | "editor" | "viewer" };
   action:
     | { type: "provider_action"; requestId?: string; intent: string }
     | { type: "fulfillment_selected"; mode: "pickup" | "delivery" }
@@ -51,132 +49,29 @@ type GraphResume = {
 };
 ```
 
-The API validates this input before it reaches LangGraph. The graph must still validate that the action is legal for its current paused state. A client never sends MCP tool names or raw tool arguments.
+Natural-language `provider_action` is classified as `add_request`, `prepare_basket`, `replace_product` or `checkout`. `checkout` reads the current basket and returns Silpo checkout links; it does not invent a place-order operation.
 
-## Interrupt output
-
-When the graph needs an external decision, emit a JSON-serializable interrupt:
+## Approval interrupt
 
 ```ts
-type GraphInterrupt = {
+type ApprovalInterrupt = {
   action: "provider_action" | "fulfillment" | "delivery_slot";
-  externalRequestId?: string;
-  reason: string;
-  details?: Record<string, unknown>;
+  requestId: string;
+  summary: string;
 };
 ```
 
-The current API adapter recognizes `action`, `type` or `category` as the action category and `externalRequestId`, `requestId` or interrupt ID as the external request reference. Prefer the canonical `action` and `externalRequestId` fields so the adapter does not need compatibility parsing forever.
+The API projects this interrupt into `workflow_approvals`. A routine `workflow_action` interrupt only means the graph is waiting and does not create an approval.
 
-The API creates a `workflow_approvals` row from this interrupt. A member request itself is not an approval decision. The owner decision is sent later with the persisted MiyKo `approvalId`.
+## Projection
 
-## Returned reference/projection
+The graph may return `providerBasketId`, `providerOrderId`, `fulfillmentMode`, `scheduledFrom` and `scheduledTo`. MiyKo stores only those thin references. Product rows, prices, totals and checkout links remain graph/provider state and must be exposed through a sanitized live graph-state read rather than copied into PostgreSQL.
 
-After every run, the graph boundary should expose:
+## Idempotency and safety
 
-```ts
-type GraphReference = {
-  status: "pending" | "running" | "interrupted" | "succeeded" | "failed" | "cancelled";
-  runId: string;
-  threadId: string;
-  interrupt?: GraphInterrupt;
-  providerBasketId?: string | null;
-  providerOrderId?: string | null;
-  fulfillmentMode?: "pickup" | "delivery" | null;
-  scheduledFrom?: string | null;
-  scheduledTo?: string | null;
-};
-```
-
-The API projects these values into `workflows` when the graph returns them, but they remain last-observed values. Current provider basket/order/fulfillment state must be read from Silpo MCP by the graph.
-
-## Node boundaries
-
-Keep the primary graph understandable and mostly linear:
-
-```text
-load_request
-  → load_memory
-  → read_provider_context
-  → prepare_request
-  → resolve_provider_items
-  → choose_replacement_or_fulfillment
-  → request_approval (interrupt)
-  → apply_provider_action
-  → confirm_provider_state
-  → learn_from_confirmed_result
-  → complete
-```
-
-Do not split this into separate meal-plan, product-catalog, order and delivery graphs. Replacement, pickup/delivery and delivery slot are branches in the same workflow.
-
-## Approval rules
-
-- Read-only MCP tools may run before approval.
-- Every real basket/order/fulfillment mutation requires an interrupt and owner approval.
-- `approve` resumes only the matching pending interrupt.
-- `decline` must not call a write tool.
-- The graph must re-read provider state after a long pause and before a write.
-- An approval stored by MiyKo is authorization metadata, not the provider's order status.
-
-## Mem0 contract
-
-Use managed Mem0 entities:
-
-```text
-household:<householdId>
-member:<memberId>
-```
-
-Read relevant memories near the beginning of the workflow. Write only confirmed durable preferences or post-purchase feedback near the end. Include `workflowId` and `eventId` metadata for deduplication. Never use Mem0 to decide household membership, role, owner approval or provider credentials.
-
-Recommended memory record shape:
-
-```json
-{
-  "fact": "The household prefers dessert for weekend dinners",
-  "scope": "household",
-  "source": "confirmed_feedback",
-  "workflowId": "<workflow-id>",
-  "eventId": "<event-id>"
-}
-```
-
-## Status semantics
-
-The API maps managed graph responses into its status enum:
-
-```text
-success → succeeded
-error/timeout → failed
-interrupted → interrupted
-pending/running/succeeded/failed/cancelled → unchanged
-```
-
-An interrupted workflow is not failed. It is waiting for the next household action. A failed MCP call should remain retryable through the MiyKo outbox unless the graph has explicitly reached a terminal failure.
-
-## Current MiyKo integration points
-
-The API adapter currently:
-
-- creates/reuses a thread using the MiyKo workflow UUID;
-- starts a run with `workflow.start` input;
-- resumes using a LangGraph command containing the action;
-- uses `eventId` metadata to avoid duplicate runs;
-- observes the run/thread and parses an interrupt;
-- updates the thin workflow projection and approval metadata.
-
-When the deployed graph is available, the remaining adapter alignment is limited to the actual deployed interrupt/result field names and provider reference mapping. Do not add local graph state to close that gap.
-
-## Versioning rule
-
-Treat state keys, node names and interrupt shapes as a compatibility surface. Existing paused threads must be able to resume after a deployment revision. Add optional fields before making a field required; keep old interrupt shapes readable during the MVP migration window.
-
-## Official references
-
-- [LangGraph persistence](https://docs.langchain.com/oss/python/langgraph/persistence)
-- [LangGraph interrupts and `Command(resume=...)`](https://docs.langchain.com/oss/python/langgraph/interrupts)
-- [LangGraph threads](https://docs.langchain.com/langsmith/use-threads)
-- [LangGraph JavaScript SDK](https://reference.langchain.com/javascript/langchain-langgraph-sdk)
-- [Mem0 add memory](https://docs.mem0.ai/core-concepts/memory-operations/add)
-- [Mem0 search memories](https://docs.mem0.ai/api-reference/memory/search-memories)
+- Every API action has an outbox event ID and idempotency key.
+- The worker reuses the workflow UUID as the thread ID and does not create duplicate threads.
+- The graph performs MCP writes only after role authorization or a resumed owner/admin approval.
+- Provider credentials are supplied per run as runtime context and are never returned in graph output.
+- Side effects happen after interrupts because LangGraph restarts an interrupted node on resume.
+- Mem0 namespaces are context boundaries, not security boundaries.

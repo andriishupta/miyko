@@ -37,10 +37,11 @@ export const householdRoleEnum = pgEnum("household_role", ["owner", "admin", "ed
 export const membershipStatusEnum = pgEnum("membership_status", ["active", "removed"]);
 export const invitationStatusEnum = pgEnum("invitation_status", ["pending", "accepted", "declined", "expired", "revoked"]);
 export const providerStatusEnum = pgEnum("provider_status", ["active", "inactive"]);
-export const providerAuthMethodEnum = pgEnum("provider_auth_method", ["mcp"]);
+export const providerAuthMethodEnum = pgEnum("provider_auth_method", ["oauth"]);
 export const providerAccountStatusEnum = pgEnum("provider_account_status", ["active", "expired", "revoked", "reconnect_required"]);
 export const providerSecretKindEnum = pgEnum("provider_secret_kind", ["access_token", "refresh_token"]);
 export const workflowStatusEnum = pgEnum("workflow_status", ["pending", "running", "interrupted", "succeeded", "failed", "cancelled"]);
+export const workflowKindEnum = pgEnum("workflow_kind", ["step-order"]);
 export const approvalStatusEnum = pgEnum("approval_status", ["pending", "approved", "declined"]);
 export const workflowActionEnum = pgEnum("workflow_action", ["provider_action", "fulfillment", "delivery_slot"]);
 export const outboxStatusEnum = pgEnum("outbox_status", ["pending", "processing", "published", "retrying", "dead_letter"]);
@@ -190,7 +191,7 @@ export const providerSecrets = pgTable("provider_secrets", {
   updatedAt: now("updated_at"),
 }, (table) => [
   uniqueIndex("provider_secrets_account_kind_uq").on(table.userProviderAccountId, table.kind),
-  pgPolicy("provider_secrets_select_own", { for: "select", using: sql`EXISTS (SELECT 1 FROM public.user_providers account WHERE account.id = ${table.userProviderAccountId} AND account.user_id = public.miyko_current_user_id())` }),
+  pgPolicy("provider_secrets_select_bound_household", { for: "select", using: sql`EXISTS (SELECT 1 FROM public.user_providers account WHERE account.id = ${table.userProviderAccountId} AND account.user_id = public.miyko_current_user_id()) OR EXISTS (SELECT 1 FROM public.connected_provider_accounts connection WHERE connection.user_provider_account_id = ${table.userProviderAccountId} AND connection.status = 'active' AND public.miyko_is_household_member(connection.household_id))` }),
   pgPolicy("provider_secrets_insert_own", { for: "insert", withCheck: sql`EXISTS (SELECT 1 FROM public.user_providers account WHERE account.id = ${table.userProviderAccountId} AND account.user_id = public.miyko_current_user_id())` }),
   pgPolicy("provider_secrets_update_own", { for: "update", using: sql`EXISTS (SELECT 1 FROM public.user_providers account WHERE account.id = ${table.userProviderAccountId} AND account.user_id = public.miyko_current_user_id())`, withCheck: sql`EXISTS (SELECT 1 FROM public.user_providers account WHERE account.id = ${table.userProviderAccountId} AND account.user_id = public.miyko_current_user_id())` }),
   pgPolicy("provider_secrets_delete_own", { for: "delete", using: sql`EXISTS (SELECT 1 FROM public.user_providers account WHERE account.id = ${table.userProviderAccountId} AND account.user_id = public.miyko_current_user_id())` }),
@@ -212,12 +213,35 @@ export const connectedProviderAccounts = pgTable("connected_provider_accounts", 
   index("connected_provider_accounts_household_status_idx").on(table.householdId, table.status),
 ]);
 
+/** Short-lived OAuth redirect context. This is not provider or workflow state. */
+export const providerOAuthSessions = pgTable("provider_oauth_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  householdId: uuid("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
+  memberId: uuid("member_id").notNull().references(() => householdMembers.id, { onDelete: "cascade" }),
+  providerId: uuid("provider_id").notNull().references(() => providers.id, { onDelete: "cascade" }),
+  stateHash: varchar("state_hash", { length: 64 }).notNull(),
+  encryptedSession: bytea("encrypted_session").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
+  completedAt: optionalDate("completed_at"),
+  createdAt: now("created_at"),
+  updatedAt: now("updated_at"),
+}, (table) => [
+  uniqueIndex("provider_oauth_sessions_state_hash_uq").on(table.stateHash),
+  index("provider_oauth_sessions_expiry_idx").on(table.expiresAt),
+  pgPolicy("provider_oauth_sessions_select_own", { for: "select", using: sql`${table.userId} = ${currentUserId()}` }),
+  pgPolicy("provider_oauth_sessions_insert_own", { for: "insert", withCheck: sql`${table.userId} = ${currentUserId()}` }),
+  pgPolicy("provider_oauth_sessions_update_own", { for: "update", using: sql`${table.userId} = ${currentUserId()}`, withCheck: sql`${table.userId} = ${currentUserId()}` }),
+  pgPolicy("provider_oauth_sessions_delete_own", { for: "delete", using: sql`${table.userId} = ${currentUserId()}` }),
+]).enableRLS();
+
 /** A small application projection. LangGraph owns state, messages, basket data and checkpoints. */
 export const workflows = pgTable("workflows", {
   id: uuid("id").primaryKey().defaultRandom(),
   householdId: uuid("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
   startedByMemberId: uuid("started_by_member_id").notNull().references(() => householdMembers.id, { onDelete: "restrict" }),
   providerId: uuid("provider_id").notNull().references(() => providers.id, { onDelete: "restrict" }),
+  workflowKind: workflowKindEnum("workflow_kind").notNull().default("step-order"),
   status: workflowStatusEnum("status").notNull().default("pending"),
   threadId: varchar("thread_id", { length: 255 }).notNull(),
   runId: varchar("run_id", { length: 255 }),
@@ -304,6 +328,7 @@ export const providersRelations = relations(providers, ({ many }) => ({ accounts
 export const userProviderAccountsRelations = relations(userProviderAccounts, ({ one, many }) => ({ user: one(users, { fields: [userProviderAccounts.userId], references: [users.id] }), provider: one(providers, { fields: [userProviderAccounts.providerId], references: [providers.id] }), secrets: many(providerSecrets), connections: many(connectedProviderAccounts) }));
 export const providerSecretsRelations = relations(providerSecrets, ({ one }) => ({ account: one(userProviderAccounts, { fields: [providerSecrets.userProviderAccountId], references: [userProviderAccounts.id] }) }));
 export const connectedProviderAccountsRelations = relations(connectedProviderAccounts, ({ one }) => ({ household: one(households, { fields: [connectedProviderAccounts.householdId], references: [households.id] }), provider: one(providers, { fields: [connectedProviderAccounts.providerId], references: [providers.id] }), userProviderAccount: one(userProviderAccounts, { fields: [connectedProviderAccounts.userProviderAccountId], references: [userProviderAccounts.id] }), authorizedByMember: one(householdMembers, { fields: [connectedProviderAccounts.authorizedByMemberId], references: [householdMembers.id] }) }));
+export const providerOAuthSessionsRelations = relations(providerOAuthSessions, ({ one }) => ({ user: one(users, { fields: [providerOAuthSessions.userId], references: [users.id] }), household: one(households, { fields: [providerOAuthSessions.householdId], references: [households.id] }), member: one(householdMembers, { fields: [providerOAuthSessions.memberId], references: [householdMembers.id] }), provider: one(providers, { fields: [providerOAuthSessions.providerId], references: [providers.id] }) }));
 export const workflowsRelations = relations(workflows, ({ one, many }) => ({ household: one(households, { fields: [workflows.householdId], references: [households.id] }), startedByMember: one(householdMembers, { fields: [workflows.startedByMemberId], references: [householdMembers.id] }), provider: one(providers, { fields: [workflows.providerId], references: [providers.id] }), approvals: many(workflowApprovals) }));
 export const workflowApprovalsRelations = relations(workflowApprovals, ({ one }) => ({ household: one(households, { fields: [workflowApprovals.householdId], references: [households.id] }), workflow: one(workflows, { fields: [workflowApprovals.workflowId], references: [workflows.id] }), requestedByMember: one(householdMembers, { fields: [workflowApprovals.requestedByMemberId], references: [householdMembers.id], relationName: "requestedApprovals" }), decidedByMember: one(householdMembers, { fields: [workflowApprovals.decidedByMemberId], references: [householdMembers.id], relationName: "decidedApprovals" }) }));
 export const outboxEventsRelations = relations(outboxEvents, ({ one }) => ({ household: one(households, { fields: [outboxEvents.householdId], references: [households.id] }) }));
@@ -311,11 +336,11 @@ export const auditLogsRelations = relations(auditLogs, ({ one }) => ({ household
 
 export const schema = {
   users, userSessions, households, householdMembers, householdInvitations,
-  providers, userProviderAccounts, providerSecrets, connectedProviderAccounts,
+  providers, userProviderAccounts, providerSecrets, connectedProviderAccounts, providerOAuthSessions,
   workflows, workflowApprovals, outboxEvents, auditLogs,
   usersRelations, userSessionsRelations, householdsRelations, householdMembersRelations,
   householdInvitationsRelations, providersRelations, userProviderAccountsRelations,
-  providerSecretsRelations, connectedProviderAccountsRelations,
+  providerSecretsRelations, connectedProviderAccountsRelations, providerOAuthSessionsRelations,
   workflowsRelations, workflowApprovalsRelations, outboxEventsRelations,
   auditLogsRelations,
 };

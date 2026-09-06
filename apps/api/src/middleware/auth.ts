@@ -5,7 +5,8 @@ import { db, withRlsContext } from '../lib/database.js'
 import { forbidden, unauthorized } from '../lib/errors.js'
 import type { HouseholdRole } from '@miyko/contracts'
 import { toContractHousehold, toContractMembership, toContractUser } from '../lib/serializers.js'
-import { authService, sha256 } from '../features/auth/auth.service.js'
+import { authService } from '../features/auth/auth.service.js'
+import { sha256 } from '../lib/crypto.js'
 
 export const authMiddleware: MiddlewareHandler = async (c, next) => {
   const authorization = c.req.header('authorization')

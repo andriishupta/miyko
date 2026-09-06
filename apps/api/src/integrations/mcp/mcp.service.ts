@@ -2,31 +2,26 @@ import { z } from 'zod'
 import { AppError } from '../../lib/errors.js'
 import { mcpConfig } from './mcp.config.js'
 import { sdkMcpClient } from './mcp.sdk.client.js'
-import type { McpClient, ProviderLoginInput } from './mcp.client.js'
+import type { McpClient, McpOAuthSession } from './mcp.client.js'
 
-const providerAuthResultSchema = z.object({
-  providerSubject: z.string().nullable(), accountLogin: z.string().nullable(), accessToken: z.string().min(1), refreshToken: z.string().nullable(), accessTokenExpiresAt: z.string().datetime().nullable(), refreshTokenExpiresAt: z.string().datetime().nullable(), scopes: z.array(z.string().min(1)),
-}).strict()
-
-const providerLoginInputSchema = z.object({ login: z.string().min(1).max(320), password: z.string().min(1).max(200) }).strict()
-const providerReauthorizeInputSchema = z.object({ refreshToken: z.string().min(1) }).strict()
-
-const parseExternal = <T>(schema: z.ZodType<T>, value: unknown): T => {
-  const parsed = schema.safeParse(value)
-  if (!parsed.success) throw new AppError('MCP_INVALID_RESPONSE', 'MCP returned an invalid response', 502)
-  return parsed.data
-}
+const tokenSchema = z.object({
+  access_token: z.string().min(1),
+  refresh_token: z.string().min(1).optional(),
+  expires_in: z.number().positive().optional(),
+  scope: z.string().optional(),
+}).passthrough()
 
 const withTimeout = async <T>(operation: string, work: () => Promise<T>) => {
+  const { requestTimeoutMs } = mcpConfig()
   let timeout: ReturnType<typeof setTimeout> | undefined
   const timeoutPromise = new Promise<never>((_, reject) => {
-    timeout = setTimeout(() => reject(new AppError('MCP_TIMEOUT', `${operation} timed out`, 504)), mcpConfig.requestTimeoutMs)
+    timeout = setTimeout(() => reject(new AppError('MCP_TIMEOUT', `${operation} timed out`, 504)), requestTimeoutMs)
   })
   try {
     return await Promise.race([work(), timeoutPromise])
   } catch (error) {
     if (error instanceof AppError) throw error
-    throw new AppError('MCP_REQUEST_FAILED', 'MCP request failed', 502)
+    throw new AppError('MCP_REQUEST_FAILED', 'MCP authorization failed', 502)
   } finally {
     if (timeout) clearTimeout(timeout)
   }
@@ -35,16 +30,28 @@ const withTimeout = async <T>(operation: string, work: () => Promise<T>) => {
 export class McpService {
   constructor(private readonly client: McpClient = sdkMcpClient) {}
 
-  async authenticate(input: ProviderLoginInput) {
-    const checkedInput = parseExternal(providerLoginInputSchema, input)
-    return parseExternal(providerAuthResultSchema, await withTimeout('provider/authenticate', () => this.client.authenticate(checkedInput)))
+  startAuthorization(state: string) {
+    const config = mcpConfig()
+    return withTimeout('provider/oauth/start', () => this.client.startAuthorization({ state, redirectUri: config.oauthRedirectUri }))
   }
 
-  async reauthorize(input: { refreshToken: string }) {
-    const checkedInput = parseExternal(providerReauthorizeInputSchema, input)
-    return parseExternal(providerAuthResultSchema, await withTimeout('provider/reauthorize', () => this.client.reauthorize(checkedInput)))
+  async finishAuthorization(session: McpOAuthSession, callbackParams: URLSearchParams) {
+    const config = mcpConfig()
+    const result = await withTimeout('provider/oauth/callback', () => this.client.finishAuthorization(session, callbackParams, config.oauthRedirectUri))
+    const tokens = tokenSchema.parse(result.tokens)
+    return {
+      session: result.session,
+      tokenSet: {
+        providerSubject: null,
+        accountLogin: null,
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token ?? null,
+        accessTokenExpiresAt: tokens.expires_in ? new Date(Date.now() + tokens.expires_in * 1_000) : null,
+        refreshTokenExpiresAt: null,
+        scopes: tokens.scope?.split(/\s+/).filter(Boolean) ?? [],
+      },
+    }
   }
-
 }
 
 export const mcpService = new McpService()

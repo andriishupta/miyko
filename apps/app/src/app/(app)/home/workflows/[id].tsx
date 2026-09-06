@@ -1,23 +1,24 @@
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, SegmentedButtons } from "react-native-paper";
-import { View } from "react-native";
+import { Linking, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { WorkflowActionRequest } from "@miyko/contracts";
 import { api, ApiError } from "@/api/client";
-import type { ApiHouseholdSummary, ApiWorkflow } from "@/api/types";
+import type { ApiHouseholdSummary, ApiWorkflow, ApiWorkflowView } from "@/api/types";
 import { Field, MiykoText, PrimaryButton, ScreenScroll, SecondaryButton, StatusPill, Surface } from "@/components/miyko-ui";
 import { Spacing } from "@/constants/theme";
 import { useTheme } from "@/hooks/use-theme";
 
-type MemberRequestKind = "add_item" | "replace_item";
+type MemberRequestKind = "add_item" | "replace_item" | "instruction";
 
 export default function WorkflowScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const [workflow, setWorkflow] = useState<ApiWorkflow | null>(null);
+  const [workflowView, setWorkflowView] = useState<ApiWorkflowView | null>(null);
   const [household, setHousehold] = useState<ApiHouseholdSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -38,6 +39,12 @@ export default function WorkflowScreen() {
       const [result, summary] = await Promise.all([api.workflows.get(id), api.household.summary()]);
       setWorkflow(result.workflow);
       setHousehold(summary);
+      try {
+        setWorkflowView((await api.workflows.view(id)).view);
+      } catch (cause) {
+        setWorkflowView(null);
+        setError(cause instanceof ApiError ? cause.message : "Live workflow state is not available yet.");
+      }
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "Could not load workflow.");
     } finally {
@@ -64,7 +71,7 @@ export default function WorkflowScreen() {
   }
 
   function decide(approvalId: string, type: "approve" | "decline") {
-    if (household?.currentMember.role !== "owner") return;
+    if (!household || !["owner", "admin"].includes(household.currentMember.role)) return;
     void submitAction({ type, approvalId }, approvalId);
   }
 
@@ -74,9 +81,13 @@ export default function WorkflowScreen() {
       setError("Describe the item or change you want to request.");
       return;
     }
-    const label = requestKind === "add_item" ? "Add item" : "Replace item";
-    void submitAction({ type: "provider_action", intent: `${label}: ${text}` }, "member-request");
+    const intent = requestKind === "add_item" ? `Add item: ${text}` : requestKind === "replace_item" ? `Replace item: ${text}` : text;
+    void submitAction({ type: "provider_action", intent }, "member-request");
     setRequestText("");
+  }
+
+  function sendCommand(intent: string, loadingId: string) {
+    void submitAction({ type: "provider_action", intent }, loadingId);
   }
 
   function sendFulfillment() {
@@ -100,7 +111,8 @@ export default function WorkflowScreen() {
   }
 
   const pending = workflow.approvals.filter((approval) => approval.status === "pending");
-  const isOwner = household?.currentMember.role === "owner";
+  const canApprove = household ? ["owner", "admin"].includes(household.currentMember.role) : false;
+  const checkoutUrl = workflowView?.checkoutUrl ?? null;
   const refs: Array<[string, string | null]> = [
     ["Workflow", workflow.id],
     ["Thread", workflow.threadId],
@@ -126,20 +138,33 @@ export default function WorkflowScreen() {
         <View style={styles.referenceGrid}>{refs.map(([label, value]) => <View key={label} style={styles.reference}><MiykoText variant="caption" color="textSecondary">{label}</MiykoText><MiykoText variant="body">{value ?? "Not returned"}</MiykoText></View>)}</View>
       </Surface>
 
+      {workflowView && <Surface>
+        <View style={styles.titleRow}><MiykoText variant="section">Live order plan</MiykoText><StatusPill label={workflowView.phase.replace(/_/g, " ")} tone={workflowView.phase === "approval_required" ? "warning" : "accent"} /></View>
+        <MiykoText variant="body" color="textSecondary">{workflowView.summary}</MiykoText>
+        {workflowView.plannedRequests.map((request, index) => <MiykoText key={`${request.memberId}-${index}`} variant="body">• {request.text}</MiykoText>)}
+        {workflowView.items.map((item, index) => <View key={`${item.name}-${index}`} style={styles.reference}><MiykoText variant="body">{item.name}{item.quantity ? ` · ${item.quantity}` : ""}</MiykoText><MiykoText variant="caption" color="textSecondary">{item.price === null ? "Price not returned" : `${item.price} ${workflowView.currency ?? ""}`}</MiykoText></View>)}
+        {workflowView.total !== null && <MiykoText variant="section">Total: {workflowView.total} {workflowView.currency ?? ""}</MiykoText>}
+        {checkoutUrl && <PrimaryButton label="Open Silpo checkout" icon="cart" onPress={() => void Linking.openURL(checkoutUrl)} />}
+      </Surface>}
+
       <Surface>
-        <MiykoText variant="section">Owner approvals</MiykoText>
+        <MiykoText variant="section">Household approvals</MiykoText>
         {pending.length === 0 ? <MiykoText variant="body" color="textSecondary">No pending approval.</MiykoText> : pending.map((approval) => <View key={approval.id} style={[styles.approval, { borderTopColor: theme.border }]}>
           <View style={styles.titleRow}><View style={{ flex: 1, gap: Spacing.one }}><MiykoText variant="body">{approval.action.replace(/_/g, " ")}</MiykoText><MiykoText variant="caption" color="textSecondary">Approval ID: {approval.id}</MiykoText></View><StatusPill label="Pending" tone="warning" /></View>
-          {isOwner ? <View style={styles.actions}><PrimaryButton label="Approve" icon="cart" loading={actionLoadingId === approval.id} disabled={Boolean(actionLoadingId && actionLoadingId !== approval.id)} onPress={() => decide(approval.id, "approve")} /><SecondaryButton label="Decline" disabled={Boolean(actionLoadingId)} onPress={() => decide(approval.id, "decline")} /></View> : <MiykoText variant="caption" color="textSecondary">Only the household owner can approve or decline this action.</MiykoText>}
+          {canApprove ? <View style={styles.actions}><PrimaryButton label="Approve" icon="cart" loading={actionLoadingId === approval.id} disabled={Boolean(actionLoadingId && actionLoadingId !== approval.id)} onPress={() => decide(approval.id, "approve")} /><SecondaryButton label="Decline" disabled={Boolean(actionLoadingId)} onPress={() => decide(approval.id, "decline")} /></View> : <MiykoText variant="caption" color="textSecondary">Only a household owner or admin can approve or decline this action.</MiykoText>}
         </View>)}
       </Surface>
 
       <Surface>
         <MiykoText variant="section">Request a workflow change</MiykoText>
         <MiykoText variant="body" color="textSecondary">Members can send a typed request to the managed workflow. Provider tools and credentials stay behind the API.</MiykoText>
-        <SegmentedButtons value={requestKind} onValueChange={(value) => setRequestKind(value as MemberRequestKind)} buttons={[{ value: "add_item", label: "Add item" }, { value: "replace_item", label: "Replace item" }]} />
-        <Field label="REQUEST" placeholder="e.g. add oat milk" value={requestText} onChangeText={setRequestText} />
+        <SegmentedButtons value={requestKind} onValueChange={(value) => setRequestKind(value as MemberRequestKind)} buttons={[{ value: "add_item", label: "Add" }, { value: "replace_item", label: "Replace" }, { value: "instruction", label: "Command" }]} />
+        <Field label="REQUEST" placeholder={requestKind === "instruction" ? "e.g. prepare the basket" : "e.g. oat milk"} value={requestText} onChangeText={setRequestText} />
         <PrimaryButton label="Send request" loading={actionLoadingId === "member-request"} disabled={Boolean(actionLoadingId && actionLoadingId !== "member-request")} onPress={sendProviderRequest} icon="arrow" />
+        {canApprove && <View style={styles.actions}>
+          <SecondaryButton label="Prepare Silpo basket" disabled={Boolean(actionLoadingId)} onPress={() => sendCommand("Prepare the Silpo basket from the confirmed household plan.", "prepare-basket")} />
+          <SecondaryButton label="Refresh checkout" disabled={Boolean(actionLoadingId)} onPress={() => sendCommand("Read the current Silpo basket and return its checkout link.", "checkout")} />
+        </View>}
       </Surface>
 
       <Surface>

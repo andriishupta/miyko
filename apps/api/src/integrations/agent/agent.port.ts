@@ -1,4 +1,4 @@
-import type { WorkflowAction as ContractWorkflowAction, WorkflowReference as ContractWorkflowReference } from "@miyko/contracts";
+import type { HouseholdRole, WorkflowAction as ContractWorkflowAction, WorkflowKind, WorkflowReference as ContractWorkflowReference, WorkflowView } from "@miyko/contracts";
 
 export type WorkflowAction = ContractWorkflowAction;
 export type WorkflowInterrupt = {
@@ -17,10 +17,13 @@ export type WorkflowReference = ContractWorkflowReference & {
 
 export type WorkflowInput = {
   workflowId: string;
+  workflowKind: WorkflowKind;
   householdId: string;
   memberId: string;
+  memberRole: HouseholdRole;
   text: string;
   providerSlug?: string;
+  providerAccessToken: string;
   source: "text" | "audio";
   eventId: string;
 };
@@ -28,4 +31,5 @@ export type WorkflowInput = {
 export interface AgentLayer {
   startWorkflow(input: WorkflowInput): Promise<WorkflowReference>;
   resumeWorkflow(input: WorkflowInput & { threadId: string; action: WorkflowAction }): Promise<WorkflowReference>;
+  getWorkflowView(input: { workflowKind: WorkflowKind; threadId: string }): Promise<WorkflowView>;
 }

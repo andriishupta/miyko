@@ -5,18 +5,18 @@ Server-only Drizzle schema for MiyKo. The Expo app must never receive `DATABASE_
 The database is a control-plane store, not a domain store. It contains:
 
 - users, sessions, households, members and invitations;
-- generic providers, owner-owned encrypted provider secrets and one household binding per provider;
-- `workflows`, which hold only the LangGraph thread/run, last-observed status and external basket/order references;
+- generic providers, short-lived OAuth callback sessions, owner-owned encrypted provider secrets and one household binding per provider;
+- `workflows`, which hold only the typed workflow kind, LangGraph thread/run, last-observed status and external basket/order references;
 - `workflow_approvals`, which hold only request/decision metadata;
 - outbox retry transport and audit logs.
 
-Recipes, products, images, basket contents, current order state, delivery slots and workflow checkpoints belong to LangGraph Cloud or Silpo MCP. The API keeps only references, last-observed projection data and approval metadata needed for access control and workflow actions. These local values are not authoritative external state and are not a product/order cache.
+Recipes, products, images, basket contents, current order state, delivery slots and workflow checkpoints belong to LangGraph Agent Server or Silpo MCP. The API keeps only references, last-observed projection data and approval metadata needed for access control and workflow actions. These local values are not authoritative external state and are not a product/order cache.
 
 ## RLS
 
 All household-owned tables require active membership through `miyko_is_household_member`. Users and sessions are scoped to the current authenticated user. Authentication and onboarding helpers are narrowly scoped `SECURITY DEFINER` functions with a fixed search path. The API sets `app.user_id` inside its request transaction after validating the bearer session.
 
-Provider credentials are encrypted server-side and referenced only by the API. The runtime role is a non-owner `api_role` without `BYPASSRLS`; migrations use the separate administrative connection.
+Provider credentials are encrypted server-side and referenced only by the API. An owner can manage their credential; an active household member can read the encrypted value only through an active household/provider binding so the trusted workflow boundary can act under household permissions. No public contract exposes it. The runtime role is a non-owner `api_role` without `BYPASSRLS`; migrations use the separate administrative connection.
 
 The outbox worker claims events through the narrowly scoped `miyko_claim_outbox_events` database function. It uses row locking and a lease, returns an active household member identity for the RLS transaction, and is executable by `api_role` without giving that role migration-owner access.
 

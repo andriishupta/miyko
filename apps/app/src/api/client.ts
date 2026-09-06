@@ -1,6 +1,6 @@
-import type { ApiResponse, CreateHouseholdResponse, HouseholdInvitation, InviteMemberRequest, LoginResponse, MemoryWriteRequest, ProviderAuthRequest, RegisterRequest, WorkflowActionRequest } from "@miyko/contracts";
+import type { ApiResponse, CreateHouseholdResponse, HouseholdInvitation, InviteMemberRequest, LoginResponse, MemoryWriteRequest, ProviderOAuthStartResponse, RegisterRequest, WorkflowActionRequest, WorkflowKind } from "@miyko/contracts";
 import { clearStoredSession, getStoredSession } from "@/api/session-storage";
-import type { ApiAudioProcessResponse, ApiDashboard, ApiHouseholdMember, ApiHouseholdSummary, ApiInvitation, ApiInvitationCreateResponse, ApiMemoryStatus, ApiProvider, ApiProviderConnectionsResponse, ApiProviderConnectionResponse, ApiWorkflow } from "@/api/types";
+import type { ApiAudioProcessResponse, ApiDashboard, ApiHouseholdMember, ApiHouseholdSummary, ApiInvitation, ApiInvitationCreateResponse, ApiMemoryStatus, ApiProvider, ApiProviderConnectionsResponse, ApiWorkflow, ApiWorkflowView } from "@/api/types";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "");
 
@@ -52,14 +52,14 @@ export const api = {
   providers: {
     list: () => request<ApiProvider[]>("/providers"),
     connections: () => request<ApiProviderConnectionsResponse>("/providers/connections"),
-    connect: (providerSlug: string, body: ProviderAuthRequest) => request<ApiProviderConnectionResponse>(`/providers/${encodeURIComponent(providerSlug)}/connect`, { method: "POST", body }),
-    reauthorize: (providerSlug: string, body: Partial<ProviderAuthRequest>) => request<ApiProviderConnectionResponse>(`/providers/${encodeURIComponent(providerSlug)}/reauthorize`, { method: "POST", body }),
+    startAuthorization: (providerSlug: string) => request<ProviderOAuthStartResponse>(`/providers/${encodeURIComponent(providerSlug)}/oauth/start`, { method: "POST" }),
     disconnect: (providerSlug: string) => request<{ disconnected: boolean }>(`/providers/${encodeURIComponent(providerSlug)}`, { method: "DELETE" }),
   },
   workflows: {
     list: () => request<ApiWorkflow[]>("/workflows"),
     get: (id: string) => request<{ workflow: ApiWorkflow }>(`/workflows/${encodeURIComponent(id)}`),
-    create: (text: string, source: "text" | "audio" = "text") => request<{ workflow: ApiWorkflow }>("/workflows", { method: "POST", body: { text, source } }),
+    view: (id: string) => request<{ view: ApiWorkflowView }>(`/workflows/${encodeURIComponent(id)}/view`),
+    create: (text: string, source: "text" | "audio" = "text", workflowKind?: WorkflowKind) => request<{ workflow: ApiWorkflow }>("/workflows", { method: "POST", body: { text, source, ...(workflowKind ? { workflowKind } : {}) } }),
     action: (id: string, body: WorkflowActionRequest, key = idempotencyKey()) => request<{ workflow: ApiWorkflow }>(`/workflows/${encodeURIComponent(id)}/actions`, { method: "POST", headers: { "Idempotency-Key": key }, body }),
   },
   audio: {
