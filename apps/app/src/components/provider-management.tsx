@@ -3,7 +3,7 @@ import { ActivityIndicator, Divider } from 'react-native-paper';
 import { View } from 'react-native';
 
 import { api, ApiError } from '@/api/client';
-import type { ApiProvider, ApiProviderAccountsResponse } from '@/api/types';
+import type { ApiProvider, ApiProviderConnectionsResponse } from '@/api/types';
 import { Field, MiykoText, PrimaryButton, SecondaryButton, StatusPill, Surface } from '@/components/miyko-ui';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
@@ -17,7 +17,7 @@ export function ProviderManagement({ onComplete }: ProviderManagementProps) {
   const theme = useTheme();
   const providerStatus = useOptionalProviderStatus();
   const [providers, setProviders] = useState<ApiProvider[]>([]);
-  const [accounts, setAccounts] = useState<ApiProviderAccountsResponse['items']>([]);
+  const [connections, setConnections] = useState<ApiProviderConnectionsResponse['items']>([]);
   const [isOwner, setIsOwner] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeSlug, setActiveSlug] = useState<string | null>(null);
@@ -30,9 +30,9 @@ export function ProviderManagement({ onComplete }: ProviderManagementProps) {
     setLoading(true);
     setError(null);
     try {
-      const [providerItems, accountResponse, household] = await Promise.all([api.providers.list(), api.providers.accounts(), api.household.summary()]);
+      const [providerItems, connectionResponse, household] = await Promise.all([api.providers.list(), api.providers.connections(), api.household.summary()]);
       setProviders(providerItems);
-      setAccounts(accountResponse.items);
+      setConnections(connectionResponse.items);
       setIsOwner(household.currentMember.role === 'owner');
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : 'Could not load store providers.');
@@ -45,7 +45,7 @@ export function ProviderManagement({ onComplete }: ProviderManagementProps) {
     void load();
   }, [load]);
 
-  const accountsByProvider = useMemo(() => new Map(accounts.map((account) => [account.provider.slug, account])), [accounts]);
+  const connectionsByProvider = useMemo(() => new Map(connections.map((connection) => [connection.provider.slug, connection])), [connections]);
 
   async function runProviderAction(provider: ApiProvider, action: () => Promise<void>, fallback: string, success?: string) {
     if (activeSlug) return false;
@@ -66,14 +66,14 @@ export function ProviderManagement({ onComplete }: ProviderManagementProps) {
   }
 
   async function connectProvider(provider: ApiProvider) {
-    const account = accountsByProvider.get(provider.slug);
+    const connection = connectionsByProvider.get(provider.slug);
     if (!login.trim() || !password || activeSlug) {
       setError('Enter the provider login and password.');
       return;
     }
 
     const completed = await runProviderAction(provider, async () => {
-      if (account && account.status !== 'active') {
+      if (connection && connection.status !== 'active') {
         await api.providers.reauthorize(provider.slug, { login: login.trim(), password });
       } else {
         await api.providers.connect(provider.slug, { login: login.trim(), password });
@@ -99,18 +99,17 @@ export function ProviderManagement({ onComplete }: ProviderManagementProps) {
       {message && <MiykoText variant="caption" color="success">{message}</MiykoText>}
       {!loading && providers.length === 0 && <Surface><MiykoText variant="body" color="textSecondary">No store providers are available yet.</MiykoText></Surface>}
       {!loading && providers.map((provider) => {
-        const account = accountsByProvider.get(provider.slug);
+        const connection = connectionsByProvider.get(provider.slug);
         const isBusy = activeSlug === provider.slug;
-        const isConnected = account?.status === 'active';
+        const isConnected = connection?.status === 'active';
         return (
           <Surface key={provider.id}>
             <View style={{ gap: Spacing.one }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: Spacing.two }}>
                 <MiykoText variant="section" style={{ flex: 1 }}>{provider.name}</MiykoText>
-                <StatusPill label={isConnected ? 'Connected' : account ? 'Reconnect required' : 'Available'} tone={isConnected ? 'success' : account ? 'warning' : 'neutral'} />
+                <StatusPill label={isConnected ? 'Connected' : connection ? 'Reconnect required' : 'Available'} tone={isConnected ? 'success' : connection ? 'warning' : 'neutral'} />
               </View>
               <MiykoText variant="caption" color="textSecondary">{provider.capabilities.join(' · ') || 'Store integration'}</MiykoText>
-              {account?.accountLogin && <MiykoText variant="caption" color="textSecondary">Account: {account.accountLogin}</MiykoText>}
             </View>
             <Divider />
             {isConnected ? (
@@ -124,7 +123,7 @@ export function ProviderManagement({ onComplete }: ProviderManagementProps) {
               <View style={{ gap: Spacing.two }}>
                 <Field label="PROVIDER LOGIN" placeholder="Email or phone" value={login} onChangeText={setLogin} />
                 <Field label="PROVIDER PASSWORD" placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
-                <PrimaryButton label={account ? 'Reconnect provider' : 'Connect provider'} loading={isBusy} onPress={() => void connectProvider(provider)} icon="cart" />
+                <PrimaryButton label={connection ? 'Reconnect provider' : 'Connect provider'} loading={isBusy} onPress={() => void connectProvider(provider)} icon="cart" />
               </View>
             )}
           </Surface>

@@ -17,7 +17,7 @@ Hono API for authentication, household access, provider connections and the thin
 - `PROVIDER_SECRETS_ENCRYPTION_KEY` for server-side encrypted provider secrets.
 - `SILPO_MCP_URL` or `SILPO_MCP_COMMAND` plus the explicit MCP tool configuration.
 - `MEM0_API_KEY` for Mem0 Cloud.
-- `LANGGRAPH_API_URL`, `LANGGRAPH_ASSISTANT_ID` and `LANGGRAPH_API_KEY` for LangGraph Cloud; LangSmith tracing is configured in the managed graph deployment.
+- `LANGGRAPH_API_URL`, `LANGGRAPH_WORKFLOW` and `LANGGRAPH_API_KEY` for LangGraph Cloud. `LANGGRAPH_WORKFLOW` is the deployed graph slug or assistant ID; LangSmith tracing is configured in the managed graph deployment.
 - `TRANSCRIPTION_API_KEY` or `OPENAI_API_KEY` for audio requests.
 
 Missing required configuration fails explicitly. No environment-based mock or fallback is selected silently.
@@ -25,7 +25,7 @@ Missing required configuration fails explicitly. No environment-based mock or fa
 ## Routes
 
 - Public/auth bootstrap: `/health`, `/auth/*`, `/onboarding/households`, `/invitations/*`.
-- Provider connection: `/providers`, `/providers/accounts`, `/:providerSlug/tools`, `connect`, `reauthorize` and disconnect. The household owner authorizes a provider once; members read and use the household binding without reconnecting. Product, basket, order and fulfillment tools are not exposed as API routes; the managed LangGraph workflow owns those calls.
+- Provider connection: `/providers`, `/providers/connections`, `connect`, `reauthorize` and disconnect. The household owner authorizes a provider once; members read and use the household binding without reconnecting. Tool discovery, product, basket, order and fulfillment calls belong to the managed LangGraph/MCP workflow and are not exposed as mobile API routes.
 - Managed workflow: `GET/POST /workflows`, `GET /workflows/:workflowId` and `POST /workflows/:workflowId/actions`.
 - Supporting surfaces: `/dashboard`, `/household`, `/audio/process` and `/memory`.
 

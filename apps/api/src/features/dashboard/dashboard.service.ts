@@ -6,7 +6,7 @@ import { toWorkflow } from "../workflows/workflows.service.js";
 
 export class DashboardService {
   async getDashboard(context: RequestContext): Promise<DashboardResponse> {
-    const [workflowRows, memberRows, connectedAccounts] = await Promise.all([
+    const [workflowRows, memberRows, providerConnections] = await Promise.all([
       db.query.workflows.findMany({ where: and(eq(workflows.householdId, context.household.id), inArray(workflows.status, ["pending", "running", "interrupted"])), with: { approvals: true }, orderBy: [desc(workflows.updatedAt)], limit: 10 }),
       db.query.householdMembers.findMany({ where: and(eq(householdMembers.householdId, context.household.id), eq(householdMembers.status, "active")) }),
       db.query.connectedProviderAccounts.findMany({ where: and(eq(connectedProviderAccounts.householdId, context.household.id), eq(connectedProviderAccounts.status, "active")) }),
@@ -17,7 +17,7 @@ export class DashboardService {
       activeWorkflows,
       householdSummary: {
         memberCount: memberRows.length,
-        connectedShoppingAccounts: connectedAccounts.length,
+        connectedProviders: providerConnections.length,
         pendingApprovals: activeWorkflows.reduce((count, workflow) => count + workflow.approvals.filter((approval) => approval.status === "pending").length, 0),
       },
       input: { audioEnabled: true, chatEnabled: true },

@@ -8,6 +8,11 @@ export type WorkflowInterrupt = {
 
 export type WorkflowReference = ContractWorkflowReference & {
   interrupt?: WorkflowInterrupt;
+  providerBasketId?: string | null;
+  providerOrderId?: string | null;
+  fulfillmentMode?: "pickup" | "delivery" | null;
+  scheduledFrom?: string | null;
+  scheduledTo?: string | null;
 };
 
 export type WorkflowInput = {

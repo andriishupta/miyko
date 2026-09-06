@@ -8,11 +8,7 @@ import { storeProviderService } from '../../integrations/store-providers/store-p
 export const providersRoutes = new Hono()
 
 providersRoutes.get('/', authMiddleware, async (c) => c.json({ data: await storeProviderService.listProviders() }))
-providersRoutes.get('/accounts', authMiddleware, householdContextMiddleware, async (c) => c.json({ data: await storeProviderService.listAccounts(c.get('requestContext')) }))
-providersRoutes.get('/:providerSlug/tools', authMiddleware, async (c) => {
-  const params = parseParams(c, providerSlugSchema)
-  return c.json({ data: { providerSlug: params.providerSlug, tools: await storeProviderService.discoverTools(params.providerSlug) } })
-})
+providersRoutes.get('/connections', authMiddleware, householdContextMiddleware, async (c) => c.json({ data: await storeProviderService.listConnections(c.get('requestContext')) }))
 providersRoutes.post('/:providerSlug/connect', authMiddleware, householdContextMiddleware, requireRole('owner'), async (c) => {
   const params = parseParams(c, providerSlugSchema)
   const input = await parseJson(c, providerAuthSchema)

@@ -25,7 +25,16 @@ const audit = async (context: RequestContext, event: OutboxEventRow, action: str
 };
 
 const updateReference = async (context: RequestContext, workflowId: string, reference: WorkflowReference) => {
-  await db.update(workflows).set({ runId: reference.runId, status: reference.status, updatedAt: new Date() }).where(and(eq(workflows.id, workflowId), eq(workflows.householdId, context.household.id)));
+  await db.update(workflows).set({
+    runId: reference.runId,
+    status: reference.status,
+    ...(reference.providerBasketId !== undefined ? { providerBasketId: reference.providerBasketId } : {}),
+    ...(reference.providerOrderId !== undefined ? { providerOrderId: reference.providerOrderId } : {}),
+    ...(reference.fulfillmentMode !== undefined ? { fulfillmentMode: reference.fulfillmentMode } : {}),
+    ...(reference.scheduledFrom !== undefined ? { scheduledFrom: reference.scheduledFrom ? new Date(reference.scheduledFrom) : null } : {}),
+    ...(reference.scheduledTo !== undefined ? { scheduledTo: reference.scheduledTo ? new Date(reference.scheduledTo) : null } : {}),
+    updatedAt: new Date(),
+  }).where(and(eq(workflows.id, workflowId), eq(workflows.householdId, context.household.id)));
 };
 
 const recordInterrupt = async (context: RequestContext, workflowId: string, requestedByMemberId: string, reference: WorkflowReference) => {

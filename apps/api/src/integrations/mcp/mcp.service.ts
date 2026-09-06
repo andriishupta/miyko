@@ -32,21 +32,8 @@ const withTimeout = async <T>(operation: string, work: () => Promise<T>) => {
   }
 }
 
-const readWithRetry = async <T>(operation: string, work: () => Promise<T>) => {
-  try {
-    return await withTimeout(operation, work)
-  } catch (firstError) {
-    if (firstError instanceof AppError && ['MCP_TIMEOUT', 'MCP_REQUEST_FAILED'].includes(firstError.code)) return withTimeout(operation, work)
-    throw firstError
-  }
-}
-
 export class McpService {
   constructor(private readonly client: McpClient = sdkMcpClient) {}
-
-  async discoverTools() {
-    return parseExternal(z.array(z.string().min(1)), await readWithRetry('tools/list', () => this.client.discoverTools()))
-  }
 
   async authenticate(input: ProviderLoginInput) {
     const checkedInput = parseExternal(providerLoginInputSchema, input)

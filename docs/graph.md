@@ -2,7 +2,7 @@
 
 Status: primary production graph for the MVP.
 
-This graph is deployed to LangSmith/LangGraph Cloud. MiyKo API creates the household workflow reference, starts a thread, forwards actions and stores only the last-observed projection. The graph owns the long-running state, checkpoints, conversation, recipe generation, MCP calls and pause/resume.
+This graph is deployed to LangSmith/LangGraph Cloud. MiyKo API owns identity, permissions, approval/outbox metadata and the last-observed workflow projection. The graph owns the long-running state, checkpoints, conversation, recipe generation, MCP calls and pause/resume.
 
 The graph always runs in the context of a MiyKo household. The household owner authorizes the provider once; graph runs started by other members use the existing household binding and never request a second provider login.
 
@@ -16,11 +16,11 @@ The deployment must expose one primary graph, for example:
 workflow
 ```
 
-The deployed assistant/graph ID is configured in the API as `LANGGRAPH_ASSISTANT_ID`. The API also needs:
+The deployed graph slug or assistant ID is configured in the API as `LANGGRAPH_WORKFLOW`. Use the exact deployed value; for the primary graph the source slug is `workflow`. The API also needs:
 
 ```text
 LANGGRAPH_API_URL
-LANGGRAPH_ASSISTANT_ID
+LANGGRAPH_WORKFLOW
 LANGGRAPH_API_KEY
 ```
 
@@ -37,7 +37,7 @@ The deployment operator may use LangSmith deployment credentials separately. Nev
    - `MEM0_API_KEY`;
    - LangSmith tracing configuration and project name.
 5. Deploy from the LangSmith UI/GitHub integration or with `langgraph deploy`.
-6. Copy the deployment URL and assistant ID into the API environment as `LANGGRAPH_API_URL` and `LANGGRAPH_ASSISTANT_ID`.
+6. Copy the deployment URL and deployed graph slug/assistant ID into the API environment as `LANGGRAPH_API_URL` and `LANGGRAPH_WORKFLOW`.
 7. Keep the API's `LANGGRAPH_API_KEY` server-side. The mobile app calls MiyKo API, never LangGraph directly.
 
 LangGraph Cloud/Agent Server provides the persistence required for interrupts and long-running threads. The graph must be invoked with a stable thread ID; MiyKo uses its workflow UUID as that ID.
@@ -52,6 +52,7 @@ householdId
 memberId
 providerSlug
 source
+memory namespaces (`household:<id>`, `member:<id>`)
 conversation/messages
 request
 recipeDraft

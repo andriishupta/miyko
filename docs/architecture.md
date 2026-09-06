@@ -54,7 +54,7 @@ The API does not interpret recipes, normalize provider products, maintain meal p
 
 ## Provider boundary
 
-`StoreProvider` is intentionally small: authentication, reauthorization and tool discovery. `user_providers` and `provider_secrets` hold the owner’s encrypted provider credentials; `connected_provider_accounts` is the single household-scoped binding that points to those credentials and records which member authorized it. `StoreProviderService` owns provider lookup, owner account persistence, encrypted secrets and household binding. Members use the existing household binding and do not reconnect the provider. Product search, basket updates and fulfillment are MCP tools invoked from the managed workflow after authorization; they are not API-owned catalog methods.
+`StoreProvider` is intentionally small: authentication and reauthorization. `user_providers` and `provider_secrets` hold the owner’s encrypted provider credentials; `connected_provider_accounts` is the single household-scoped binding that points to those credentials and records which member authorized it. `StoreProviderService` owns provider lookup, owner account persistence, encrypted secrets and household binding. Members use the existing household binding and do not reconnect the provider. Tool discovery, product search, basket updates and fulfillment are MCP operations invoked from the managed workflow after authorization; they are not mobile API methods.
 
 The provider registry remains useful because it resolves provider-specific authentication/MCP wiring by slug. Adding another store should not change household, workflow or approval tables.
 

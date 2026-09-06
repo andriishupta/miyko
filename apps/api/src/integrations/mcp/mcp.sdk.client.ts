@@ -72,13 +72,6 @@ export class SdkMcpClient implements McpClient {
     }
   }
 
-  async discoverTools(): Promise<string[]> {
-    return this.withClient(null, async (client) => {
-      const result = await client.listTools()
-      return result.tools.map((tool) => tool.name)
-    })
-  }
-
   private call(toolName: string | undefined, args: JsonRecord, accessToken: string | null) {
     return this.withClient(accessToken, async (client) => sdkResultPayload(await client.callTool({ name: requiredTool(toolName), arguments: args })))
   }

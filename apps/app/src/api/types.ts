@@ -8,7 +8,7 @@ import type {
   InvitationCreateResponse,
   LoginResponse,
   Provider,
-  ProviderAccountsResponse,
+  ProviderConnectionsResponse,
   ProviderConnectionResponse,
   RegisterRequest,
   Workflow,
@@ -21,7 +21,7 @@ export type ApiHouseholdMember = HouseholdMember;
 export type ApiInvitation = HouseholdInvitation;
 export type ApiInvitationCreateResponse = InvitationCreateResponse;
 export type ApiProvider = Provider;
-export type ApiProviderAccountsResponse = ProviderAccountsResponse;
+export type ApiProviderConnectionsResponse = ProviderConnectionsResponse;
 export type ApiProviderConnectionResponse = ProviderConnectionResponse;
 export type ApiAudioProcessResponse = AudioProcessResponse;
 export type ApiWorkflow = Workflow;

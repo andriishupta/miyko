@@ -250,7 +250,7 @@ PostgreSQL remains the source of truth for:
 - membership;
 - roles and permissions;
 - invitations;
-- connected Silpo accounts;
+- owner Silpo authorization and the household provider connection;
 - encrypted OAuth credentials;
 - approval status;
 - workflow references, outbox events and audit records.
@@ -351,7 +351,7 @@ Follow-up notifications are deferred from the core MVP. If enabled later, a noti
 - household creation;
 - owner and member roles;
 - household invitation;
-- one connected Silpo account;
+- one household Silpo connection authorized by the owner;
 - Mem0 memory extraction and retrieval;
 - natural-language workflow;
 - managed Silpo MCP recipe/product/basket interaction;
@@ -361,7 +361,7 @@ Follow-up notifications are deferred from the core MVP. If enabled later, a noti
 
 ### Should have
 
-- second connected Silpo account;
+- an additional store provider;
 - voice input;
 - child profile;
 - item replacement;

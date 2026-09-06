@@ -23,7 +23,7 @@ login/register → create or join household → household owner connects Silpo o
 - Silpo MCP: provider products, images, basket, fulfillment and order details.
 - PostgreSQL/Drizzle: control-plane and thin projection data only; no local recipe/product/order/memory store.
 
-The provider abstraction and registry remain: they isolate provider authentication and MCP tool discovery from the core flow. Product and basket operations are invoked from the managed workflow after approval.
+The provider abstraction and registry remain: they isolate provider authentication from the core flow. MCP tool discovery, product and basket operations are handled by the managed workflow after authorization and approval.
 
 MiyKo may cache provider reads or the latest observed workflow/provider status to reduce repeated requests. These are read optimizations only: they are not authoritative state, are not approval evidence and must be revalidated by the managed workflow before a provider mutation.
 

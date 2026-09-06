@@ -3,11 +3,12 @@ import { householdMembers } from "@miyko/database/schema";
 import type { RequestContext } from "@miyko/contracts";
 import { db } from "../../lib/database.js";
 import { forbidden, notFound } from "../../lib/errors.js";
+import { householdMemoryNamespace, memberMemoryNamespace } from "../../integrations/memory/memory.namespaces.js";
 
 export type MemoryNamespace = string;
 
 export const requireMemoryNamespace = async (context: RequestContext, memberId?: string | null): Promise<MemoryNamespace> => {
-  if (!memberId) return `household:${context.household.id}`;
+  if (!memberId) return householdMemoryNamespace(context.household.id);
   if (memberId !== context.membership.id && !["owner", "admin"].includes(context.membership.role)) throw forbidden();
 
   const member = await db.query.householdMembers.findFirst({
@@ -19,5 +20,5 @@ export const requireMemoryNamespace = async (context: RequestContext, memberId?:
   });
   if (!member) throw notFound("Household member");
 
-  return `member:${memberId}`;
+  return memberMemoryNamespace(memberId);
 };

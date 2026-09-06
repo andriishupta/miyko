@@ -13,7 +13,6 @@ const toTokenSet = (result: Awaited<ReturnType<typeof mcpService.authenticate>>)
 });
 
 export const silpoProvider: StoreProvider = {
-  discoverTools: () => mcpService.discoverTools(),
   async authenticate(input: ProviderAuthRequest) {
     return toTokenSet(await mcpService.authenticate(input));
   },

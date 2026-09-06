@@ -20,12 +20,11 @@ export const providerConnectionResponseSchema = z.object({ provider: providerSch
 export const householdProviderConnectionSchema = z.object({
   id: uuid,
   providerId: uuid,
-  accountLogin: z.string().nullable(),
   status: z.enum(["active", "expired", "revoked", "reconnect_required"]),
-  connectedByMemberId: uuid,
+  authorizedByMemberId: uuid,
   provider: providerSchema,
 }).strict();
-export const providerAccountsResponseSchema = z.object({ items: z.array(householdProviderConnectionSchema) }).strict();
+export const providerConnectionsResponseSchema = z.object({ items: z.array(householdProviderConnectionSchema) }).strict();
 
 const providerActionSchema = z.object({
   type: z.literal("provider_action"),

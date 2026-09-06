@@ -17,6 +17,7 @@ export default function HomeScreen() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { session } = useAuth();
+  const { connected: providerConnected } = useProviderStatus();
   const [dashboard, setDashboard] = useState<ApiDashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,21 +36,21 @@ export default function HomeScreen() {
     <Stack.Screen options={{ title: "Home", headerLargeTitle: true, headerRight: () => <Pressable onPress={() => router.push("/home/settings")}><AppIcon name="gear" size={22} color={theme.text} /></Pressable> }} />
     <ScreenScroll bottomInset={insets.bottom + 112}>
       <View style={styles.greeting}><View style={{ flex: 1, gap: 4 }}><MiykoText variant="caption" color="textSecondary">Good morning, {userName}</MiykoText><MiykoText variant="title">Let&apos;s make food easy.</MiykoText></View><Pressable onPress={() => router.push("/household")} style={[styles.householdButton, { backgroundColor: theme.accentSoft }]}><MiykoText variant="label" color="accent">{dashboard.household.name.slice(0, 2).toUpperCase()}</MiykoText></Pressable></View>
-      <Surface style={styles.summary}><View style={styles.header}><View style={{ flex: 1, gap: 4 }}><MiykoText variant="caption" color="textSecondary">ACTIVE WORKFLOWS</MiykoText><MiykoText variant="section">{dashboard.activeWorkflows.length ? "Household requests in progress" : "No active requests"}</MiykoText></View><StatusPill label={dashboard.householdSummary.pendingApprovals ? `${dashboard.householdSummary.pendingApprovals} review` : "Ready"} tone={dashboard.householdSummary.pendingApprovals ? "warning" : "accent"} /></View><MiykoText variant="body" color="textSecondary">Recipes, products, basket contents and pause/resume state live in LangGraph Cloud and the connected provider.</MiykoText><MiykoText variant="caption" color="textSecondary">{dashboard.householdSummary.memberCount} household members · {dashboard.householdSummary.connectedShoppingAccounts} provider account{dashboard.householdSummary.connectedShoppingAccounts === 1 ? "" : "s"} connected.</MiykoText></Surface>
-      <ProviderStateCard />
-      <AudioRecorderCard />
-      <SecondaryButton label="Open chat" icon="message" onPress={() => router.push("/home/chat")} />
-      <View style={styles.section}><MiykoText variant="section">Requests</MiykoText>{dashboard.activeWorkflows.length === 0 ? <EmptyState title="Nothing in progress" detail="Start a dinner, shopping or order request from chat." /> : dashboard.activeWorkflows.map((workflow) => <WorkflowCard key={workflow.id} workflow={workflow} onPress={() => router.push(`/home/workflows/${workflow.id}`)} />)}</View>
+      <Surface style={styles.summary}><View style={styles.header}><View style={{ flex: 1, gap: 4 }}><MiykoText variant="caption" color="textSecondary">ACTIVE WORKFLOWS</MiykoText><MiykoText variant="section">{dashboard.activeWorkflows.length ? "Household requests in progress" : "No active requests"}</MiykoText></View><StatusPill label={dashboard.householdSummary.pendingApprovals ? `${dashboard.householdSummary.pendingApprovals} review` : "Ready"} tone={dashboard.householdSummary.pendingApprovals ? "warning" : "accent"} /></View><MiykoText variant="body" color="textSecondary">Recipes, products, basket contents and pause/resume state live in LangGraph Cloud and the connected provider.</MiykoText><MiykoText variant="caption" color="textSecondary">{dashboard.householdSummary.memberCount} household members · {dashboard.householdSummary.connectedProviders} provider{dashboard.householdSummary.connectedProviders === 1 ? "" : "s"} connected.</MiykoText></Surface>
+      <ProviderStateCard isOwner={dashboard.household.ownerId === session?.user.id} />
+      {providerConnected && <><AudioRecorderCard /><SecondaryButton label="Open chat" icon="message" onPress={() => router.push("/home/chat")} /></>}
+      <View style={styles.section}><MiykoText variant="section">Requests</MiykoText>{dashboard.activeWorkflows.length === 0 ? <EmptyState title="Nothing in progress" detail={providerConnected ? "Start a dinner, shopping or order request from chat." : "A household provider connection is required to start workflows."} /> : dashboard.activeWorkflows.map((workflow) => <WorkflowCard key={workflow.id} workflow={workflow} onPress={() => router.push(`/home/workflows/${workflow.id}`)} />)}</View>
     </ScreenScroll>
   </>;
 }
 
-function ProviderStateCard() {
+function ProviderStateCard({ isOwner }: { isOwner: boolean }) {
   const router = useRouter();
-  const { accounts, connected, loading, error, refresh } = useProviderStatus();
+  const { connections, connected, loading, error, refresh } = useProviderStatus();
   if (loading) return <Surface><ActivityIndicator /></Surface>;
   if (error) return <Surface><MiykoText variant="section">Provider status unavailable</MiykoText><MiykoText variant="body" color="textSecondary">{error}</MiykoText><PrimaryButton label="Retry" onPress={() => void refresh()} /></Surface>;
-  return <Surface style={styles.provider}><View style={styles.header}><MiykoText variant="section">Store provider</MiykoText><StatusPill label={connected ? "Connected" : "Not connected"} tone={connected ? "success" : "warning"} /></View><MiykoText variant="body" color="textSecondary">{connected ? `${accounts.filter((account) => account.status === "active").map((account) => account.provider.name).join(" · ")} is ready for provider-dependent actions.` : "You can start a household workflow now; connect Silpo when it needs provider actions or approval."}</MiykoText><SecondaryButton label={connected ? "Manage provider" : "Connect provider"} icon="cart" onPress={() => router.push("/home/providers")} /></Surface>;
+  const emptyMessage = isOwner ? "Connect a provider before starting a household workflow." : "The household owner must connect a provider before workflows can start.";
+  return <Surface style={styles.provider}><View style={styles.header}><MiykoText variant="section">Store provider</MiykoText><StatusPill label={connected ? "Connected" : "Not connected"} tone={connected ? "success" : "warning"} /></View><MiykoText variant="body" color="textSecondary">{connected ? `${connections.filter((connection) => connection.status === "active").map((connection) => connection.provider.name).join(" · ")} is ready for provider-dependent actions.` : emptyMessage}</MiykoText><SecondaryButton label={connected ? "Manage provider" : isOwner ? "Connect provider" : "View providers"} icon="cart" onPress={() => router.push("/home/providers")} /></Surface>;
 }
 
 function WorkflowCard({ workflow, onPress }: { workflow: ApiWorkflow; onPress: () => void }) {

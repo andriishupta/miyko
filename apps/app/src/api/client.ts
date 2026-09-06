@@ -1,6 +1,6 @@
 import type { ApiResponse, CreateHouseholdResponse, HouseholdInvitation, InviteMemberRequest, LoginResponse, MemoryWriteRequest, ProviderAuthRequest, RegisterRequest, WorkflowActionRequest } from "@miyko/contracts";
 import { clearStoredSession, getStoredSession } from "@/api/session-storage";
-import type { ApiAudioProcessResponse, ApiDashboard, ApiHouseholdMember, ApiHouseholdSummary, ApiInvitation, ApiInvitationCreateResponse, ApiMemoryStatus, ApiProvider, ApiProviderAccountsResponse, ApiProviderConnectionResponse, ApiWorkflow } from "@/api/types";
+import type { ApiAudioProcessResponse, ApiDashboard, ApiHouseholdMember, ApiHouseholdSummary, ApiInvitation, ApiInvitationCreateResponse, ApiMemoryStatus, ApiProvider, ApiProviderConnectionsResponse, ApiProviderConnectionResponse, ApiWorkflow } from "@/api/types";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL?.replace(/\/$/, "");
 
@@ -51,7 +51,7 @@ export const api = {
   onboarding: { createHousehold: (name: string) => request<CreateHouseholdResponse>("/onboarding/households", { method: "POST", body: { name } }) },
   providers: {
     list: () => request<ApiProvider[]>("/providers"),
-    accounts: () => request<ApiProviderAccountsResponse>("/providers/accounts"),
+    connections: () => request<ApiProviderConnectionsResponse>("/providers/connections"),
     connect: (providerSlug: string, body: ProviderAuthRequest) => request<ApiProviderConnectionResponse>(`/providers/${encodeURIComponent(providerSlug)}/connect`, { method: "POST", body }),
     reauthorize: (providerSlug: string, body: Partial<ProviderAuthRequest>) => request<ApiProviderConnectionResponse>(`/providers/${encodeURIComponent(providerSlug)}/reauthorize`, { method: "POST", body }),
     disconnect: (providerSlug: string) => request<{ disconnected: boolean }>(`/providers/${encodeURIComponent(providerSlug)}`, { method: "DELETE" }),

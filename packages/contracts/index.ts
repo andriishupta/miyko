@@ -51,12 +51,11 @@ export type ProviderConnectionResponse = { provider: Provider; account: UserProv
 export type HouseholdProviderConnection = {
   id: UUID;
   providerId: UUID;
-  accountLogin: string | null;
   status: ProviderAccountStatus;
-  connectedByMemberId: UUID;
+  authorizedByMemberId: UUID;
   provider: Provider;
 };
-export type ProviderAccountsResponse = { items: HouseholdProviderConnection[] };
+export type ProviderConnectionsResponse = { items: HouseholdProviderConnection[] };
 
 export type LoginRequest = { email: string; password: string };
 export type RegisterRequest = { email: string; password: string; firstName: string; lastName: string; displayName?: string | null };
@@ -119,7 +118,7 @@ export type MemoryWriteRequest = { text: string; memberId?: UUID | null; source:
 export type DashboardResponse = {
   household: Household;
   activeWorkflows: Workflow[];
-  householdSummary: { memberCount: number; connectedShoppingAccounts: number; pendingApprovals: number };
+  householdSummary: { memberCount: number; connectedProviders: number; pendingApprovals: number };
   input: { audioEnabled: boolean; chatEnabled: boolean };
 };
 

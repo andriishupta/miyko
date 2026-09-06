@@ -10,9 +10,8 @@ export type ProviderTokenSet = {
   scopes: string[];
 };
 
-/** Authentication and tool discovery only. LangGraph/MCP owns basket and product data. */
+/** Provider authorization only. LangGraph/MCP owns tool discovery, basket and product data. */
 export interface StoreProvider {
-  discoverTools(): Promise<string[]>;
   authenticate(input: ProviderAuthRequest): Promise<ProviderTokenSet>;
   reauthorize(input: { refreshToken: string }): Promise<ProviderTokenSet>;
 }

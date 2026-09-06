@@ -24,11 +24,16 @@ type GraphStartInput = {
   source: "text" | "audio";
   eventId: string;
   text: string;
+  memory: {
+    householdNamespace: string;
+    memberNamespace: string;
+  };
 };
 ```
 
 `workflowId` is the MiyKo UUID and the LangGraph `thread_id`. `eventId` is the outbox event ID used for run idempotency and tracing. The graph must treat it as a correlation ID, not as user content.
 `providerSlug` identifies the provider already connected to the household. The graph must use that household binding and owner-authorized provider access; it must not ask the requesting member for provider credentials.
+`memory.householdNamespace` and `memory.memberNamespace` are the managed Mem0 identifiers. Use them for memory reads and writes; do not create a local memory namespace or database record.
 
 ## Resume input
 
@@ -83,7 +88,7 @@ type GraphReference = {
 };
 ```
 
-The API may project these values into `workflows`, but they remain last-observed values. Current provider basket/order/fulfillment state must be read from Silpo MCP by the graph.
+The API projects these values into `workflows` when the graph returns them, but they remain last-observed values. Current provider basket/order/fulfillment state must be read from Silpo MCP by the graph.
 
 ## Node boundaries
 

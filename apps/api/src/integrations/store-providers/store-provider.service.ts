@@ -6,7 +6,7 @@ import {
 } from '@miyko/database/schema'
 import type {
   Provider,
-  ProviderAccountsResponse,
+  ProviderConnectionsResponse,
   ProviderAuthRequest,
   ProviderConnectionResponse,
   RequestContext,
@@ -45,7 +45,7 @@ export class StoreProviderService {
     return rows.map(toProvider)
   }
 
-  async listAccounts(context: RequestContext): Promise<ProviderAccountsResponse> {
+  async listConnections(context: RequestContext): Promise<ProviderConnectionsResponse> {
     const rows = await db.query.connectedProviderAccounts.findMany({
       where: eq(connectedProviderAccounts.householdId, context.household.id),
       with: { provider: true },
@@ -54,17 +54,11 @@ export class StoreProviderService {
       items: rows.flatMap((row) => row.provider ? [{
         id: row.id,
         providerId: row.providerId,
-        accountLogin: null,
         status: row.status,
-        connectedByMemberId: row.authorizedByMemberId,
+        authorizedByMemberId: row.authorizedByMemberId,
         provider: toProvider(row.provider),
       }] : []),
     }
-  }
-
-  async discoverTools(providerSlug: string) {
-    const { provider } = await this.resolve(providerSlug)
-    return provider.discoverTools()
   }
 
   async connect(context: RequestContext, providerSlug: string, input: ProviderAuthRequest): Promise<ProviderConnectionResponse> {
@@ -74,7 +68,7 @@ export class StoreProviderService {
       ? await this.findAccountBySubject(context.user.id, providerRow.id, tokenSet.providerSubject)
       : await this.findAccount(context.user.id, providerRow.id)
     const account = await this.saveTokenSet(context.user.id, providerRow.id, tokenSet, previous?.id, previous)
-    await this.bindAccount(context, providerRow.id, account.id)
+    await this.upsertHouseholdConnection(context, providerRow.id, account.id)
     return { provider: toProvider(providerRow), account: toAccount(account) }
   }
 
@@ -87,7 +81,7 @@ export class StoreProviderService {
       ? await provider.authenticate(input as ProviderAuthRequest)
       : await this.refresh(provider, account)
     const updated = await this.saveTokenSet(context.user.id, providerRow.id, tokenSet, account.id, account)
-    await this.bindAccount(context, providerRow.id, updated.id)
+    await this.upsertHouseholdConnection(context, providerRow.id, updated.id)
     return { provider: toProvider(providerRow), account: toAccount(updated) }
   }
 
@@ -107,7 +101,7 @@ export class StoreProviderService {
     return { disconnected: true }
   }
 
-  private async bindAccount(context: RequestContext, providerId: string, accountId: string) {
+  private async upsertHouseholdConnection(context: RequestContext, providerId: string, accountId: string) {
     const existing = await db.query.connectedProviderAccounts.findFirst({
       where: and(
         eq(connectedProviderAccounts.householdId, context.household.id),
