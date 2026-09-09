@@ -8,12 +8,14 @@ type MemoryOptions = { userId: string; metadata?: Record<string, string> }
 
 type Mem0Api = {
   add(messages: string | MemoryMessage[], options: MemoryOptions): Promise<unknown>
+  getAll(options: { filters: { user_id: string }; pageSize?: number; latestOnly?: boolean }): Promise<unknown>
   search(query: string, options: { filters: { user_id: string }; topK?: number }): Promise<unknown>
   update(memoryId: string, content: string): Promise<unknown>
 }
 
 const memoryIdSchema = z.object({ id: z.string().min(1) }).passthrough()
 const memoryResultSchema = z.union([memoryIdSchema, z.array(memoryIdSchema).min(1), z.object({ results: z.array(memoryIdSchema).min(1) }).passthrough()])
+const memoryListSchema = z.union([z.array(z.unknown()), z.object({ results: z.array(z.unknown()) }).passthrough()])
 
 const client = (): Mem0Api => {
   const apiKey = process.env.MEM0_API_KEY
@@ -32,6 +34,13 @@ export const mem0Client: MemoryProvider = {
       if (Array.isArray(results) && results.length > 0) return results[0].id
     }
     return parsed.data.id
+  },
+
+  async list(namespace: string) {
+    const result = await client().getAll({ filters: { user_id: namespace }, pageSize: 100, latestOnly: true })
+    const parsed = memoryListSchema.safeParse(result)
+    if (!parsed.success) throw new AppError('MEM0_INVALID_RESPONSE', 'Mem0 returned an invalid response', 502)
+    return Array.isArray(parsed.data) ? parsed.data : parsed.data.results
   },
 
   async search(namespace: string, query: string, limit = 20) {

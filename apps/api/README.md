@@ -40,6 +40,8 @@ If `DEMO_PASSWORD` is not set, the local-only default is `miyko-demo-password`. 
 
 The seed does not connect Silpo or create a provider token. After logging in as owner, open provider management and complete Silpo OAuth in the browser. The other two users use the same seeded household and do not connect Silpo separately. The script is idempotent for the seeded IDs; use a fresh local database if an earlier seed created the old editor/viewer demo accounts.
 
+After Silpo is connected, the owner can press **Load latest 10 orders into memory** in provider management. The API calls the read-only Silpo history tool and writes or refreshes the household's Mem0 history memory before the first workflow. No database memory row is created; the existing `silpo_order_history` source marker makes the operation idempotent.
+
 ## Routes
 
 - Public/auth bootstrap: `/health`, `/auth/*`, `/onboarding/households`, `/invitations/*`.

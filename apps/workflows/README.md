@@ -7,7 +7,7 @@ Local LangGraph application for MiyKo. The graph slug is the hardcoded workflow 
 1. Copy `.env.example` to `.env`.
 2. Add `OPENAI_API_KEY` and `MEM0_API_KEY`. LangSmith Cloud tracing is not required. The Silpo token is not a workflow environment variable.
 3. Install workspace dependencies with `pnpm install` from the repository root.
-4. Start this app with `pnpm --filter @miyko/workflows dev`.
+4. Start this app with `pnpm --filter workflows dev`.
 5. Set the API environment to `LANGGRAPH_API_URL=http://127.0.0.1:2024`. A LangGraph API key is not required for the local server.
 
 The local Agent Server owns graph checkpoints. MiyKo PostgreSQL does not contain a LangGraph checkpointer. The initial request and member additions remain in graph state until the order flow ends; Mem0 stores reusable household context and the summary of the latest ten Silpo online orders. `langgraph dev` persists development state to its local directory, which is enough for the recorded demo if that directory is kept. Hosted or production-like LangGraph is needed later for durability across machine loss or replacement.

@@ -39,6 +39,10 @@ export default function WorkflowScreen() {
       const [result, summary] = await Promise.all([api.workflows.get(id), api.household.summary()]);
       setWorkflow(result.workflow);
       setHousehold(summary);
+      if (result.workflow.status === "pending" || !result.workflow.runId) {
+        setWorkflowView(null);
+        return;
+      }
       try {
         setWorkflowView((await api.workflows.view(id)).view);
       } catch (cause) {
@@ -131,6 +135,11 @@ export default function WorkflowScreen() {
       <View style={styles.titleRow}><View style={{ flex: 1, gap: Spacing.one }}><MiykoText variant="title">Workflow</MiykoText><MiykoText variant="caption" color="textSecondary">Managed workflow projection</MiykoText></View><StatusPill label={workflow.status} tone={workflow.status === "interrupted" || pending.length ? "warning" : workflow.status === "succeeded" ? "success" : "accent"} /></View>
       {error && <MiykoText variant="caption" color="danger">{error}</MiykoText>}
       <SecondaryButton label="Refresh latest state" disabled={Boolean(actionLoadingId) || refreshing} onPress={() => void load(false)} />
+
+      {(!workflow.runId || workflow.status === "pending") && <Surface>
+        <MiykoText variant="section">Workflow is queued</MiykoText>
+        <MiykoText variant="body" color="textSecondary">The API created the workflow. The outbox worker is starting its LangGraph run; refresh this screen after a moment.</MiykoText>
+      </Surface>}
 
       <Surface>
         <MiykoText variant="section">Last observed state</MiykoText>

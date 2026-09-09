@@ -1,4 +1,4 @@
-import type { ApiResponse, CreateHouseholdResponse, HouseholdInvitation, InviteMemberRequest, LoginResponse, MemoryWriteRequest, ProviderOAuthStartResponse, RegisterRequest, WorkflowActionRequest, WorkflowKind } from "@miyko/contracts";
+import type { ApiResponse, CreateHouseholdResponse, HouseholdInvitation, InviteMemberRequest, LoginResponse, MemoryWriteRequest, ProviderMemoryBootstrapResponse, ProviderOAuthStartResponse, RegisterRequest, WorkflowActionRequest, WorkflowKind } from "@miyko/contracts";
 import { clearStoredSession, getStoredSession } from "@/api/session-storage";
 import type { ApiAudioProcessResponse, ApiDashboard, ApiHouseholdMember, ApiHouseholdSummary, ApiInvitation, ApiInvitationCreateResponse, ApiMemoryStatus, ApiProvider, ApiProviderConnectionsResponse, ApiWorkflow, ApiWorkflowView } from "@/api/types";
 
@@ -53,6 +53,7 @@ export const api = {
     list: () => request<ApiProvider[]>("/providers"),
     connections: () => request<ApiProviderConnectionsResponse>("/providers/connections"),
     startAuthorization: (providerSlug: string) => request<ProviderOAuthStartResponse>(`/providers/${encodeURIComponent(providerSlug)}/oauth/start`, { method: "POST" }),
+    bootstrapMemory: (providerSlug: string) => request<ProviderMemoryBootstrapResponse>(`/providers/${encodeURIComponent(providerSlug)}/memory/bootstrap`, { method: "POST" }),
     disconnect: (providerSlug: string) => request<{ disconnected: boolean }>(`/providers/${encodeURIComponent(providerSlug)}`, { method: "DELETE" }),
   },
   workflows: {

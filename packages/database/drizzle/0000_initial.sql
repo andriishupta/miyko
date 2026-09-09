@@ -279,6 +279,39 @@ RETURNS TABLE (session_id uuid)
 LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path = pg_catalog
 AS $$ INSERT INTO public.user_sessions (user_id, token_hash, expires_at) SELECT u.id, target_token_hash, target_expires_at FROM public.users u WHERE u.id = target_user_id AND u.status = 'active' RETURNING user_sessions.id $$;
 
+CREATE OR REPLACE FUNCTION public.miyko_household_members(target_household_id uuid)
+RETURNS TABLE (
+  member_id uuid,
+  household_id uuid,
+  user_id uuid,
+  role public.household_role,
+  status public.membership_status,
+  joined_at timestamptz,
+  removed_at timestamptz,
+  email varchar,
+  display_name varchar
+)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog
+AS $$
+  SELECT member.id,
+         member.household_id,
+         member.user_id,
+         member.role,
+         member.status,
+         member.joined_at,
+         member.removed_at,
+         account.email,
+         COALESCE(
+           NULLIF(account.display_name, ''),
+           NULLIF(concat_ws(' ', account.first_name, account.last_name), '')
+         )::varchar
+  FROM public.household_members member
+  JOIN public.users account ON account.id = member.user_id
+  WHERE member.household_id = target_household_id
+    AND public.miyko_is_household_member(target_household_id)
+  ORDER BY member.joined_at, member.id
+$$;
+
 CREATE OR REPLACE FUNCTION public.miyko_claim_outbox_events(target_worker_id varchar, target_limit integer, target_lease_ms integer)
 RETURNS TABLE (
   user_id uuid,
@@ -346,7 +379,7 @@ BEGIN
         attempts = e.attempts + 1,
         claimed_at = clock_timestamp(),
         claimed_by = target_worker_id,
-        claim_expires_at = clock_timestamp() + make_interval(msecs => target_lease_ms),
+        claim_expires_at = clock_timestamp() + (target_lease_ms * interval '1 millisecond'),
         updated_at = clock_timestamp()
     FROM candidates c
     WHERE e.id = c.id
@@ -437,6 +470,7 @@ REVOKE ALL ON FUNCTION public.miyko_auth_find_session(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.miyko_provider_oauth_find_session(varchar) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.miyko_auth_create_user(varchar, varchar, text, varchar, varchar, varchar) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.miyko_auth_create_session(uuid, text, timestamptz) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.miyko_household_members(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.miyko_claim_outbox_events(varchar, integer, integer) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.miyko_current_user_id() TO api_role;
 GRANT EXECUTE ON FUNCTION public.miyko_current_user_email() TO api_role;
@@ -448,6 +482,7 @@ GRANT EXECUTE ON FUNCTION public.miyko_auth_find_session(text) TO api_role;
 GRANT EXECUTE ON FUNCTION public.miyko_provider_oauth_find_session(varchar) TO api_role;
 GRANT EXECUTE ON FUNCTION public.miyko_auth_create_user(varchar, varchar, text, varchar, varchar, varchar) TO api_role;
 GRANT EXECUTE ON FUNCTION public.miyko_auth_create_session(uuid, text, timestamptz) TO api_role;
+GRANT EXECUTE ON FUNCTION public.miyko_household_members(uuid) TO api_role;
 GRANT EXECUTE ON FUNCTION public.miyko_claim_outbox_events(varchar, integer, integer) TO api_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO api_role;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO api_role;

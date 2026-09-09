@@ -36,6 +36,7 @@ export type Provider = {
   capabilities: ProviderCapability[];
 };
 export type ProviderOAuthStartResponse = { authorizationUrl: string; returnUrl: string };
+export type ProviderMemoryBootstrapResponse = { initialized: boolean; refreshed: boolean; memoryId: string | null; orderCount: number | null };
 export type HouseholdProviderConnection = {
   id: UUID;
   providerId: UUID;

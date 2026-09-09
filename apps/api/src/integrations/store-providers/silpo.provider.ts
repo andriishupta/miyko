@@ -9,4 +9,7 @@ export const silpoProvider: StoreProvider = {
     const result = await mcpService.finishAuthorization(session, callbackParams)
     return result.tokenSet
   },
+  getRecentOrders(accessToken, limit) {
+    return mcpService.callTool(accessToken, 'silpo_get_my_online_orders', { limit })
+  },
 }

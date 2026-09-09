@@ -1,3 +1,4 @@
+import { Client, StreamableHTTPClientTransport, type CallToolResult, type JSONObject } from '@modelcontextprotocol/client'
 import { z } from 'zod'
 import { AppError } from '../../lib/errors.js'
 import { mcpConfig } from './mcp.config.js'
@@ -10,6 +11,8 @@ const tokenSchema = z.object({
   expires_in: z.number().positive().optional(),
   scope: z.string().optional(),
 }).passthrough()
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 
 const withTimeout = async <T>(operation: string, work: () => Promise<T>) => {
   const { requestTimeoutMs } = mcpConfig()
@@ -51,6 +54,28 @@ export class McpService {
         scopes: tokens.scope?.split(/\s+/).filter(Boolean) ?? [],
       },
     }
+  }
+
+  async callTool(accessToken: string, toolName: string, arguments_: JSONObject = {}): Promise<CallToolResult> {
+    return withTimeout(`provider/${toolName}`, async () => {
+      const client = new Client({ name: 'miyko-api', version: '1.0.0' })
+      const transport = new StreamableHTTPClientTransport(new URL(mcpConfig().serverUrl), {
+        requestInit: { headers: { Authorization: `Bearer ${accessToken}` } },
+      })
+      try {
+        await client.connect(transport)
+        const { tools } = await client.listTools()
+        const tool = tools.find((candidate) => candidate.name === toolName)
+        if (!tool) throw new AppError('MCP_TOOL_UNAVAILABLE', 'Required provider tool is unavailable', 502)
+        const properties = isRecord(tool.inputSchema) && isRecord(tool.inputSchema.properties) ? tool.inputSchema.properties : null
+        const safeArguments = properties
+          ? Object.fromEntries(Object.entries(arguments_).filter(([name]) => name in properties))
+          : {}
+        return await client.callTool({ name: tool.name, arguments: safeArguments })
+      } finally {
+        await client.close()
+      }
+    })
   }
 }
 

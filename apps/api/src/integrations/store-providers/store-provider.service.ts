@@ -8,6 +8,7 @@ import {
 } from '@miyko/database/schema'
 import type {
   Provider,
+  ProviderMemoryBootstrapResponse,
   ProviderConnectionsResponse,
   ProviderOAuthStartResponse,
   RequestContext,
@@ -21,12 +22,49 @@ import { providerSecretStorage } from './provider-secret.storage.js'
 import { decryptProviderValue, encryptProviderValue } from './provider-secrets.js'
 import { storeProviderRegistry } from './store-provider.registry.js'
 import type { ProviderTokenSet, StoreProvider } from './store-provider.types.js'
+import { householdMemoryNamespace } from '../memory/memory.namespaces.js'
+import { mem0Client } from '../memory/mem0.client.js'
 
 const OAUTH_SESSION_MINUTES = 10
 
 type OAuthSessionLookup = { session_id: string; user_id: string }
 
 const firstRow = <T>(rows: unknown) => (rows as T[])[0]
+const HISTORY_MEMORY_SOURCE = 'silpo_order_history'
+const HISTORY_LIMIT = 10
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
+
+const providerResultText = (result: unknown): string => {
+  if (!isRecord(result)) return typeof result === 'string' ? result : JSON.stringify(result) ?? String(result)
+  if (result.structuredContent !== undefined) return JSON.stringify(result.structuredContent)
+  if (Array.isArray(result.content)) {
+    const text = result.content
+      .flatMap((item) => isRecord(item) && item.type === 'text' && typeof item.text === 'string' ? [item.text] : [])
+      .join('\n')
+    if (text) return text
+  }
+  return JSON.stringify(result)
+}
+
+const providerOrderCount = (result: unknown): number | null => {
+  if (!isRecord(result)) return null
+  const text = providerResultText(result)
+  let parsedText: unknown
+  try {
+    parsedText = JSON.parse(text) as unknown
+  } catch {
+    parsedText = undefined
+  }
+  const payload = result.structuredContent ?? parsedText
+  if (isRecord(payload)) {
+    for (const key of ['orders', 'items', 'results']) {
+      if (Array.isArray(payload[key])) return payload[key].length
+    }
+  }
+  if (Array.isArray(payload)) return payload.length
+  return null
+}
 
 const toProvider = (row: typeof providers.$inferSelect): Provider => ({
   id: row.id,
@@ -149,6 +187,30 @@ export class StoreProviderService {
     const secret = await providerSecretStorage.load(connection.userProviderAccountId)
     if (!secret?.accessToken) throw providerNotConnected()
     return secret.accessToken
+  }
+
+  async bootstrapMemory(context: RequestContext, providerSlug: string): Promise<ProviderMemoryBootstrapResponse> {
+    const { provider } = await this.resolve(providerSlug)
+    const accessToken = await this.getAccessToken(context, providerSlug)
+    const namespace = householdMemoryNamespace(context.household.id)
+    const result = await provider.getRecentOrders(accessToken, HISTORY_LIMIT)
+    const content = `Silpo latest ${HISTORY_LIMIT} online orders:\n${providerResultText(result)}`
+    const existing = (await mem0Client.list(namespace)).find((item) => {
+      if (!isRecord(item) || !isRecord(item.metadata)) return false
+      return item.metadata.source === HISTORY_MEMORY_SOURCE
+    })
+    const existingId = isRecord(existing) && typeof existing.id === 'string' ? existing.id : null
+    if (existingId) {
+      await mem0Client.update(existingId, content)
+      return { initialized: true, refreshed: true, memoryId: existingId, orderCount: providerOrderCount(result) }
+    }
+
+    const memoryId = await mem0Client.add(namespace, content, {
+      source: HISTORY_MEMORY_SOURCE,
+      providerSlug,
+      householdId: context.household.id,
+    })
+    return { initialized: true, refreshed: false, memoryId, orderCount: providerOrderCount(result) }
   }
 
   private async upsertHouseholdConnection(householdId: string, memberId: string, providerId: string, accountId: string) {

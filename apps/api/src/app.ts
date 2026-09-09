@@ -40,6 +40,16 @@ app.use('*', authMiddleware)
 app.use('*', notFoundMiddleware)
 
 export const onUncaughtError = (error: Error, c: Context) => {
+  const cause = error instanceof Error ? error.cause : undefined
+
+  logger.error('request.failed', {
+    requestId: c.get('requestId'),
+    method: c.req.method,
+    path: c.req.path,
+    error: error.message,
+    cause: cause instanceof Error ? cause.message : String(cause ?? ''),
+  })
+
   if (error instanceof AppError) {
     return c.json({ error: { code: error.code, message: error.message, requestId: c.get('requestId') } }, error.status)
   }

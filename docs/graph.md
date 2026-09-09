@@ -17,7 +17,7 @@ Start locally:
 
 ```bash
 pnpm install
-pnpm --filter @miyko/workflows dev
+pnpm --filter workflows dev
 ```
 
 LangGraph Agent Server owns checkpoints and interrupt/resume. MiyKo stores only the workflow UUID/thread ID, latest run/status, provider references and approval decisions. `langgraph dev` persists development state to its local directory, so the same thread can continue across API requests and ordinary local restarts as long as that directory is preserved. This is sufficient for the recorded demo, but it is not a production durability guarantee; deploy or use a production-like Agent Server later when the workflow must survive machine loss and deployment replacement.
@@ -26,9 +26,9 @@ LangGraph Agent Server owns checkpoints and interrupt/resume. MiyKo stores only 
 
 ```text
 owner connects the household Silpo account once through OAuth 2.1 + PKCE
+  → owner loads the latest 10 Silpo orders into Mem0
   → start step-order from text/audio
   → graph reads relevant Mem0 context
-  → once per household, read the latest 10 online Silpo orders and summarize them into Mem0
   → keep the initial request in LangGraph state; do not change the Silpo basket
   → owner/admin/editor additions go directly into the shared graph plan
   → viewer/child addition interrupts for owner/admin approval
@@ -56,6 +56,8 @@ Use only `https://mcp.silpo.ua/mcp`. The graph calls `tools/list`, filters tools
 
 Silpo exposes basket mutation and checkout links but no final place-order tool. The workflow must not report a completed order unless Silpo returns an actual order ID. For the demo, opening the returned checkout link is the final manual step.
 
+The MCP agent does not require a second LLM structured-output call. It completes the provider operation conversationally; `runSilpo` projects the latest relevant MCP tool result into the small basket/history view needed by LangGraph and the UI.
+
 OAuth is Authorization Code + PKCE with Dynamic Client Registration. `POST /providers/:providerSlug/oauth/start` returns the provider authorization URL, the public API callback completes the code exchange, and the API stores encrypted credentials behind one household binding. Only the household owner starts this flow. MiyKo login/password remains separate application authentication and is never used as provider credentials.
 
 ## Memory boundary
@@ -65,7 +67,7 @@ OAuth is Authorization Code + PKCE with Dynamic Client Registration. `POST /prov
 - Mem0 member namespace `member:{memberId}`: relevant personal preferences.
 - PostgreSQL: no messages, plans, products, basket items or checkpoints.
 
-The first history bootstrap checks Mem0 for the `silpo_order_history` source marker before requesting the latest ten online orders. The imported summary is also available to the first workflow run. Mem0 is context only; it does not authorize actions or replace graph state.
+The owner must preload the `silpo_order_history` memory from provider management before starting the first workflow. The API calls the read-only history tool and creates or refreshes that household memory; no local database marker is needed. Every workflow reads the existing household and member memories during initialization. The graph never calls provider history as a fallback: if the initial household memory is missing, initialization stops and asks the owner to preload it. Mem0 is context only; it does not authorize actions or replace graph state.
 
 ## Local evidence
 

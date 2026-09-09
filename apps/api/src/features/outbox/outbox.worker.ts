@@ -39,6 +39,7 @@ export class OutboxWorker {
   private readonly workerId = `api:${randomUUID()}`;
   private timer: ReturnType<typeof setInterval> | undefined;
   private running = false;
+  private noEventsLogged = false;
 
   start() {
     if (this.timer) return;
@@ -60,6 +61,14 @@ export class OutboxWorker {
     this.running = true;
     try {
       const claims = await outboxWorkerStore.claim(this.workerId, claimLimit, leaseMs);
+      if (claims.length === 0) {
+        if (!this.noEventsLogged) {
+          logger.info("outbox.skipped", { reason: "no_events" });
+          this.noEventsLogged = true;
+        }
+      } else {
+        this.noEventsLogged = false;
+      }
       let published = 0;
       let retrying = 0;
       let deadLetter = 0;

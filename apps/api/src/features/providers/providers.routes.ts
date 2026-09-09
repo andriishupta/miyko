@@ -23,6 +23,10 @@ providersRoutes.post('/:providerSlug/oauth/start', authMiddleware, householdCont
   const params = parseParams(c, providerSlugSchema)
   return c.json({ data: await storeProviderService.startAuthorization(c.get('requestContext'), params.providerSlug) })
 })
+providersRoutes.post('/:providerSlug/memory/bootstrap', authMiddleware, householdContextMiddleware, requireRole('owner'), async (c) => {
+  const params = parseParams(c, providerSlugSchema)
+  return c.json({ data: await storeProviderService.bootstrapMemory(c.get('requestContext'), params.providerSlug) })
+})
 providersRoutes.delete('/:providerSlug', authMiddleware, householdContextMiddleware, requireRole('owner'), async (c) => {
   const params = parseParams(c, providerSlugSchema)
   return c.json({ data: await storeProviderService.disconnect(c.get('requestContext'), params.providerSlug) })

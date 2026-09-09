@@ -2,26 +2,26 @@ import { ChatOpenAI } from "@langchain/openai";
 import { Command, START, StateGraph, interrupt, type GraphNode } from "@langchain/langgraph";
 import { z } from "zod";
 import { workflowConfig } from "./config.js";
-import { findMemories, findMemoriesBySource, householdNamespace, memberNamespace, remember } from "./memory.js";
+import { findMemories, findMemoriesBySource, householdNamespace, memberNamespace } from "./memory.js";
 import { workflowError, workflowLog } from "./observability.js";
 import { runSilpo, type ProviderResult, type SilpoOperation } from "./silpo.js";
 
 const roleSchema = z.enum(["owner", "admin", "editor", "viewer"]);
-const actorSchema = z.object({ memberId: z.string().uuid(), role: roleSchema });
+const actorSchema = z.object({ memberId: z.string().uuid(), role: roleSchema }).passthrough();
 const actionSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("provider_action"), requestId: z.string().optional(), intent: z.string() }),
-  z.object({ type: z.literal("fulfillment_selected"), mode: z.enum(["pickup", "delivery"]) }),
-  z.object({ type: z.literal("delivery_slot_selected"), scheduledFrom: z.string(), scheduledTo: z.string() }),
-  z.object({ type: z.literal("approve"), approvalId: z.string().uuid() }),
-  z.object({ type: z.literal("decline"), approvalId: z.string().uuid() }),
+  z.object({ type: z.literal("provider_action"), requestId: z.string().optional(), intent: z.string() }).passthrough(),
+  z.object({ type: z.literal("fulfillment_selected"), mode: z.enum(["pickup", "delivery"]) }).passthrough(),
+  z.object({ type: z.literal("delivery_slot_selected"), scheduledFrom: z.string(), scheduledTo: z.string() }).passthrough(),
+  z.object({ type: z.literal("approve"), approvalId: z.string().uuid() }).passthrough(),
+  z.object({ type: z.literal("decline"), approvalId: z.string().uuid() }).passthrough(),
 ]);
-const resumedActionSchema = z.object({ eventId: z.string(), action: actionSchema, actor: actorSchema });
-const plannedRequestSchema = z.object({ memberId: z.string().uuid(), text: z.string() });
+const resumedActionSchema = z.object({ eventId: z.string(), action: actionSchema, actor: actorSchema }).passthrough();
+const plannedRequestSchema = z.object({ memberId: z.string().uuid(), text: z.string() }).passthrough();
 const classifiedSchema = z.object({
   kind: z.enum(["add_request", "prepare_basket", "replace_product", "checkout"]),
   instruction: z.string(),
-});
-const stepOrderContextSchema = z.object({ providerAccessToken: z.string().min(1) });
+}).passthrough();
+const stepOrderContextSchema = z.object({ providerAccessToken: z.string().min(1) }).passthrough();
 type StepOrderContext = z.infer<typeof stepOrderContextSchema>;
 
 const stepOrderStateSchema = z.object({
@@ -35,25 +35,25 @@ const stepOrderStateSchema = z.object({
   providerSlug: z.string(),
   source: z.enum(["text", "audio"]),
   eventId: z.string(),
-  memory: z.object({ householdNamespace: z.string(), memberNamespace: z.string() }),
+  memory: z.object({ householdNamespace: z.string(), memberNamespace: z.string() }).passthrough(),
   phase: z.enum(["collecting", "approval_required", "basket_ready", "ready_for_checkout", "completed"]).default("collecting"),
   plannedRequests: z.array(plannedRequestSchema).default([]),
   memoryContext: z.array(z.string()).default([]),
   actor: actorSchema.optional(),
   latestAction: actionSchema.optional(),
   classified: classifiedSchema.optional(),
-  pendingRequest: z.object({ requestId: z.string(), actor: actorSchema, classified: classifiedSchema }).nullable().default(null),
+  pendingRequest: z.object({ requestId: z.string(), actor: actorSchema, classified: classifiedSchema }).passthrough().nullable().default(null),
   providerBasketId: z.string().nullable().default(null),
   providerOrderId: z.string().nullable().default(null),
   fulfillmentMode: z.enum(["pickup", "delivery"]).nullable().default(null),
   scheduledFrom: z.string().nullable().default(null),
   scheduledTo: z.string().nullable().default(null),
-  items: z.array(z.object({ name: z.string(), quantity: z.string().nullable(), price: z.number().nullable(), imageUrl: z.string().nullable() })).default([]),
+  items: z.array(z.object({ name: z.string(), quantity: z.string().nullable(), price: z.number().nullable(), imageUrl: z.string().nullable() }).passthrough()).default([]),
   total: z.number().nullable().default(null),
   currency: z.string().nullable().default(null),
   checkoutUrl: z.string().nullable().default(null),
   summary: z.string().default(""),
-});
+}).passthrough();
 type StepOrderState = z.infer<typeof stepOrderStateSchema>;
 
 type WorkflowNode<Next extends string = string> = GraphNode<typeof stepOrderStateSchema, StepOrderContext, Next>;
@@ -73,12 +73,10 @@ const initialize: WorkflowNode = async (state, runtime) => {
     findMemories(config.mem0ApiKey, household, state.text),
     findMemories(config.mem0ApiKey, member, state.text),
   ]);
-  const bootstrap = await findMemoriesBySource(config.mem0ApiKey, household, "silpo_order_history");
-  let historyContext = bootstrap.flatMap((item) => item.memory ? [item.memory] : []);
-  if (!bootstrap.length) {
-    const history = await runSilpo("history", "Read exactly the latest 10 online orders. Summarize recurring products, quantities and useful preferences. Do not mutate anything.", providerAccessToken(runtime), { workflowId: state.workflowId, eventId: state.eventId });
-    await remember(config.mem0ApiKey, household, `Silpo latest ten online orders imported. ${history.summary}`, { source: "silpo_order_history", workflowId: state.workflowId, eventId: state.eventId });
-    historyContext = [history.summary];
+  const historyMemories = await findMemoriesBySource(config.mem0ApiKey, household, "silpo_order_history");
+  const historyContext = historyMemories.flatMap((item) => item.memory ? [item.memory] : []);
+  if (!historyContext.length) {
+    throw new Error("Household order memory is not initialized. Load the latest 10 provider orders before starting a workflow.");
   }
   return {
     phase: "collecting",
@@ -101,7 +99,7 @@ const classifyAction: WorkflowNode<"authorize_action"> = async (state) => {
   if (action.type === "delivery_slot_selected") return new Command({ update: { classified: { kind: "prepare_basket", instruction: `Set delivery slot from ${action.scheduledFrom} to ${action.scheduledTo}.` } }, goto: "authorize_action" });
 
   const config = workflowConfig();
-  const model = new ChatOpenAI({ apiKey: config.openAiApiKey, model: config.openAiModel });
+  const model = new ChatOpenAI({ apiKey: config.openAiApiKey, model: config.openAiModel, useResponsesApi: true });
   const startedAt = Date.now();
   workflowLog("openai.classification.started", { workflowId: state.workflowId, eventId: state.eventId, model: config.openAiModel });
   let classified: z.infer<typeof classifiedSchema>;

@@ -7,6 +7,7 @@ import { conflict, unauthorized } from '../../lib/errors.js'
 import { toContractUser } from '../../lib/serializers.js'
 import { hashPassword, verifyPassword } from '../../lib/password.js'
 import { sha256 } from '../../lib/crypto.js'
+import { toPostgresTimestamp } from '../../lib/dates.js'
 
 const SESSION_DAYS = 30
 
@@ -70,7 +71,11 @@ export class AuthService {
     const token = randomBytes(32).toString('base64url')
     const expiresAt = new Date(Date.now() + SESSION_DAYS * 86_400_000)
     const sessionRows = await db.execute(sql`
-      select * from public.miyko_auth_create_session(${userId}::uuid, ${sha256(token)}, ${expiresAt})
+      select * from public.miyko_auth_create_session(
+        ${userId}::uuid,
+        ${sha256(token)},
+        ${toPostgresTimestamp(expiresAt)}::timestamptz
+      )
     `)
     if (!firstRow<{ session_id: string }>(sessionRows)) throw unauthorized()
 

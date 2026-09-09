@@ -14,4 +14,5 @@ export type ProviderTokenSet = {
 export interface StoreProvider {
   startAuthorization(state: string): Promise<{ authorizationUrl: string; session: McpOAuthSession }>
   finishAuthorization(session: McpOAuthSession, callbackParams: URLSearchParams): Promise<ProviderTokenSet>
+  getRecentOrders(accessToken: string, limit: number): Promise<unknown>
 }

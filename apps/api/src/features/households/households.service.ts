@@ -1,10 +1,11 @@
 import { randomBytes } from 'node:crypto'
-import { and, eq, gt, or } from 'drizzle-orm'
+import { and, eq, gt, or, sql } from 'drizzle-orm'
 import { householdInvitations, householdMembers, households, users } from '@miyko/database/schema'
 import type { AuthUser, CreateHouseholdResponse, HouseholdInvitation, HouseholdSummary, InviteMemberRequest, RequestContext } from '@miyko/contracts'
 import { db } from '../../lib/database.js'
 import { notFound } from '../../lib/errors.js'
 import { sha256 } from '../../lib/crypto.js'
+import { fromPostgresTimestamp } from '../../lib/dates.js'
 import { toContractHousehold, toContractMember, toContractMembership } from '../../lib/serializers.js'
 
 const toInvitation = (row: typeof householdInvitations.$inferSelect): HouseholdInvitation => ({
@@ -12,6 +13,18 @@ const toInvitation = (row: typeof householdInvitations.$inferSelect): HouseholdI
   role: row.role === 'owner' ? 'viewer' : row.role, status: row.status,
   expiresAt: row.expiresAt.toISOString(), acceptedAt: row.acceptedAt?.toISOString() ?? null,
 })
+
+type HouseholdMemberLookup = {
+  member_id: string
+  household_id: string
+  user_id: string
+  role: 'owner' | 'admin' | 'editor' | 'viewer'
+  status: 'active' | 'removed'
+  joined_at: Date | string
+  removed_at: Date | string | null
+  email: string
+  display_name: string | null
+}
 
 export class HouseholdsService {
   async createForUser(user: AuthUser, name: string): Promise<CreateHouseholdResponse> {
@@ -29,8 +42,19 @@ export class HouseholdsService {
   }
 
   async members(context: RequestContext) {
-    const rows = await db.query.householdMembers.findMany({ where: eq(householdMembers.householdId, context.household.id), with: { user: true } })
-    return rows.map((row) => toContractMember(row))
+    const rows = await db.execute(sql`
+      select * from public.miyko_household_members(${context.household.id}::uuid)
+    `)
+    return (rows as HouseholdMemberLookup[]).map((row) => toContractMember({
+      id: row.member_id,
+      householdId: row.household_id,
+      userId: row.user_id,
+      role: row.role,
+      status: row.status,
+      joinedAt: fromPostgresTimestamp(row.joined_at),
+      removedAt: row.removed_at ? fromPostgresTimestamp(row.removed_at) : null,
+      user: { id: row.user_id, email: row.email, displayName: row.display_name },
+    }))
   }
 
   async invite(context: RequestContext, input: InviteMemberRequest) {
