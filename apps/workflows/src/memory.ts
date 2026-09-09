@@ -1,4 +1,4 @@
-import MemoryClient, { type Memory } from "mem0ai";
+import { MemoryClient, type Memory } from "mem0ai";
 
 const client = (apiKey: string) => new MemoryClient({ apiKey });
 

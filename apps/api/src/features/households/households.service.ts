@@ -4,7 +4,7 @@ import { householdInvitations, householdMembers, households, users } from '@miyk
 import type { AuthUser, CreateHouseholdResponse, HouseholdInvitation, HouseholdSummary, InviteMemberRequest, RequestContext } from '@miyko/contracts'
 import { db } from '../../lib/database.js'
 import { notFound } from '../../lib/errors.js'
-import { sha256 } from '../auth/auth.service.js'
+import { sha256 } from '../../lib/crypto.js'
 import { toContractHousehold, toContractMember, toContractMembership } from '../../lib/serializers.js'
 
 const toInvitation = (row: typeof householdInvitations.$inferSelect): HouseholdInvitation => ({

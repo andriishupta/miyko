@@ -1,4 +1,4 @@
-import MemoryClient from 'mem0ai'
+import { MemoryClient } from 'mem0ai'
 import { z } from 'zod'
 import { AppError } from '../../lib/errors.js'
 import type { MemoryProvider } from './memory.port.js'
@@ -27,7 +27,10 @@ export const mem0Client: MemoryProvider = {
     const parsed = memoryResultSchema.safeParse(result)
     if (!parsed.success) throw new AppError('MEM0_INVALID_RESPONSE', 'Mem0 returned an invalid response', 502)
     if (Array.isArray(parsed.data)) return parsed.data[0].id
-    if ('results' in parsed.data) return parsed.data.results[0].id
+    if ('results' in parsed.data) {
+      const results = parsed.data.results
+      if (Array.isArray(results) && results.length > 0) return results[0].id
+    }
     return parsed.data.id
   },
 

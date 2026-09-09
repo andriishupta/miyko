@@ -30,10 +30,14 @@ const providerActionSchema = z.object({
 export const workflowActionSchema = z.discriminatedUnion("type", [
   providerActionSchema,
   z.object({ type: z.literal("fulfillment_selected"), mode: z.enum(["pickup", "delivery"]) }).strict(),
-  z.object({ type: z.literal("delivery_slot_selected"), scheduledFrom: isoDate, scheduledTo: isoDate }).strict().refine((value) => value.scheduledTo >= value.scheduledFrom, "Delivery slot end must not precede its start"),
+  z.object({ type: z.literal("delivery_slot_selected"), scheduledFrom: isoDate, scheduledTo: isoDate }).strict(),
   z.object({ type: z.literal("approve"), approvalId: uuid }).strict(),
   z.object({ type: z.literal("decline"), approvalId: uuid }).strict(),
-]);
+]).superRefine((value, context) => {
+  if (value.type === "delivery_slot_selected" && value.scheduledTo < value.scheduledFrom) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Delivery slot end must not precede its start", path: ["scheduledTo"] });
+  }
+});
 
 export const createWorkflowSchema = z.object({
   text: z.string().trim().min(1).max(2_000),

@@ -1,5 +1,5 @@
 import { ChatOpenAI } from "@langchain/openai";
-import { Command, START, StateGraph, StateSchema, interrupt, type GraphNode } from "@langchain/langgraph";
+import { Command, START, StateGraph, interrupt, type GraphNode } from "@langchain/langgraph";
 import { z } from "zod";
 import { workflowConfig } from "./config.js";
 import { findMemories, findMemoriesBySource, householdNamespace, memberNamespace, remember } from "./memory.js";
@@ -24,7 +24,7 @@ const classifiedSchema = z.object({
 const stepOrderContextSchema = z.object({ providerAccessToken: z.string().min(1) });
 type StepOrderContext = z.infer<typeof stepOrderContextSchema>;
 
-const StepOrderState = new StateSchema({
+const stepOrderStateSchema = z.object({
   operation: z.literal("workflow.start"),
   workflowId: z.string().uuid(),
   workflowKind: z.literal("step-order"),
@@ -54,8 +54,9 @@ const StepOrderState = new StateSchema({
   checkoutUrl: z.string().nullable().default(null),
   summary: z.string().default(""),
 });
+type StepOrderState = z.infer<typeof stepOrderStateSchema>;
 
-type WorkflowNode<Next extends string = string> = GraphNode<typeof StepOrderState, StepOrderContext, Next>;
+type WorkflowNode<Next extends string = string> = GraphNode<typeof stepOrderStateSchema, StepOrderContext, Next>;
 
 const providerAccessToken = (runtime: { context?: StepOrderContext }) => {
   const token = runtime.context?.providerAccessToken;
@@ -139,7 +140,7 @@ const requestApproval: WorkflowNode<"await_action" | "apply_action"> = (state) =
   return new Command({ update: { actor: state.pendingRequest.actor, classified: state.pendingRequest.classified, pendingRequest: null }, goto: "apply_action" });
 };
 
-const providerOperation = (state: typeof StepOrderState.State): SilpoOperation => {
+const providerOperation = (state: StepOrderState): SilpoOperation => {
   if (state.latestAction?.type === "fulfillment_selected" || state.latestAction?.type === "delivery_slot_selected") return "fulfillment";
   if (state.classified?.kind === "replace_product") return "replacement";
   if (state.classified?.kind === "checkout") return "checkout";
@@ -174,7 +175,7 @@ const applyAction: WorkflowNode<"await_action"> = async (state, runtime) => {
   return new Command({ update: { ...providerUpdate(result), ...fulfillmentUpdate(state.latestAction), phase }, goto: "await_action" });
 };
 
-export const stepOrderGraph = new StateGraph(StepOrderState, stepOrderContextSchema)
+export const stepOrderGraph = new StateGraph(stepOrderStateSchema, stepOrderContextSchema)
   .addNode("initialize", initialize)
   .addNode("await_action", awaitAction, { ends: ["classify_action"] })
   .addNode("classify_action", classifyAction, { ends: ["authorize_action"] })

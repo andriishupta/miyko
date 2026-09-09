@@ -8,7 +8,7 @@ export class MemoryService {
   }
 
   async write(namespace: MemoryNamespace, input: MemoryWriteRequest) {
-    const externalMemoryId = await mem0Client.add(namespace, input.text, { source: input.source, confirmed: input.confirmed ?? false });
+    const externalMemoryId = await mem0Client.add(namespace, input.text, { source: input.source, confirmed: String(input.confirmed ?? false) });
     return { namespace, externalMemoryId };
   }
 

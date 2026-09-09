@@ -4,6 +4,7 @@ import type { RequestContext } from "@miyko/contracts";
 import { db } from "../../lib/database.js";
 import { AppError, notFound } from "../../lib/errors.js";
 import { agentLayer } from "../../integrations/agent/graphs.js";
+import { storeProviderService } from "../../integrations/store-providers/store-provider.service.js";
 import type { WorkflowReference } from "../../integrations/agent/agent.port.js";
 import type { OutboxEventRow } from "./outbox.service.js";
 import { z } from "zod";

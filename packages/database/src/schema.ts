@@ -1,7 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
-  bytea,
   check,
+  customType,
   integer,
   index,
   jsonb,
@@ -15,6 +15,8 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
+
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" });
 
 export type JsonObject = Record<string, unknown>;
 

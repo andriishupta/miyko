@@ -15,6 +15,7 @@
     "@miyko/contracts": "workspace:*",
     "@miyko/database": "workspace:*",
     "@modelcontextprotocol/client": "^2.0.0",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.13.5",
     "mem0ai": "^3.1.7",
     "zod": "^3.25.76"

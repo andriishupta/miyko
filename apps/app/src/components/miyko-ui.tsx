@@ -25,7 +25,7 @@ export function AppIcon({ name, size = 20, color, ...props }: { name: SymbolName
   return <SymbolView name={symbols[name]} size={size} tintColor={color} {...props} />;
 }
 
-export function MiykoText({ variant = 'body', color = 'text', style, ...props }: ComponentProps<typeof PaperText> & { variant?: 'hero' | 'title' | 'section' | 'body' | 'caption' | 'label'; color?: ThemeColor }) {
+export function MiykoText({ variant = 'body', color = 'text', style, ...props }: Omit<ComponentProps<typeof PaperText>, 'variant'> & { variant?: 'hero' | 'title' | 'section' | 'body' | 'caption' | 'label'; color?: ThemeColor }) {
   const theme = useTheme();
   return <PaperText selectable variant={paperVariants[variant]} style={[{ color: theme[color] }, style]} {...props} />;
 }

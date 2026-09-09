@@ -6,7 +6,7 @@ import { View } from 'react-native';
 
 import { ApiError } from '@/api/client';
 import { useAuth } from '@/auth/auth-context';
-import { Field, MiykoLogo, MiykoText, PrimaryButton, ScreenScroll, Surface } from '@/components/miyko-ui';
+import { Field, MiykoLogo, MiykoText, PrimaryButton, ScreenScroll, SecondaryButton, Surface } from '@/components/miyko-ui';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
