@@ -119,7 +119,7 @@ const projectProviderResult = (operation: SilpoOperation, messages: readonly unk
 };
 
 const toolNames = {
-  history: ["silpo_get_my_online_orders"],
+  history: ["silpo_get_my_offline_orders"],
   basket: ["silpo_get_my_shopping_cart", "silpo_get_my_delivery_addresses", "silpo_find_address", "silpo_get_available_delivery_types", "silpo_list_branches", "silpo_get_time_slots", "silpo_create_shopping_cart", "silpo_get_shopping_cart_by_id", "silpo_find_products_batch", "silpo_add_or_update_cart_products"],
   replacement: ["silpo_get_my_shopping_cart", "silpo_get_shopping_cart_by_id", "silpo_get_time_slots", "silpo_get_products", "silpo_get_promotions", "silpo_get_similar_products", "silpo_get_replacements", "silpo_add_or_update_cart_products", "silpo_remove_cart_products"],
   fulfillment: ["silpo_get_my_shopping_cart", "silpo_get_shopping_cart_by_id", "silpo_get_my_delivery_addresses", "silpo_find_address", "silpo_get_available_delivery_types", "silpo_list_branches", "silpo_get_time_slots", "silpo_update_shopping_cart"],
@@ -142,7 +142,7 @@ export const runSilpo = async (operation: SilpoOperation, instruction: string, a
   const tools = (await mcp.getTools()).filter((tool) => allowed.has(tool.name));
   const missing = toolNames[operation].filter((name) => !tools.some((tool) => tool.name === name));
   if (missing.length) throw new Error(`Silpo MCP is missing required tools: ${missing.join(", ")}`);
-  workflowLog("silpo.mcp.tools.ready", { ...context, operation, toolCount: tools.length });
+  workflowLog("silpo.mcp.tools.ready", { ...context, operation, toolCount: tools.length, tools: tools.map((tool) => tool.name).sort().join(",") });
 
   const model = new ChatOpenAI({
     apiKey: config.openAiApiKey,
@@ -152,13 +152,30 @@ export const runSilpo = async (operation: SilpoOperation, instruction: string, a
   const readbackInstruction = operation === "history"
     ? "For history, finish after reading the requested orders."
     : "After any provider mutation, read the current shopping cart before finishing so the final provider result reflects the current basket.";
+  const operationInstruction = operation === "basket"
+    ? "For basket preparation, read the active cart first. If no active cart exists, create one with the selected fulfillment context before adding products. You must call silpo_find_products_batch for the confirmed plan, then call silpo_add_or_update_cart_products with the returned productId, companyId and branchId values, then read the cart again. Do not claim that search or add tools are unavailable when they are exposed in this run. Do not place an order."
+    : operation === "fulfillment"
+      ? "Update only the selected fulfillment context. Follow the requested pickup or delivery mode exactly; never silently switch between them. Validate any slot through silpo_get_time_slots before updating the cart."
+      : operation === "checkout"
+        ? "Read the current cart and return its checkout link and current contents. Do not add products and do not place an order."
+        : "Apply the requested provider operation to the current cart and read it back.";
   const agent = createAgent({
     model,
     tools,
     middleware: [localAgentLogging({ ...context, operation, model: config.openAiModel })],
-    systemPrompt: `You operate the official Silpo MCP. Follow each tool schema exactly, never invent provider data, never call a tool outside the supplied allowlist, and finish the requested provider operation. ${readbackInstruction} A checkout link is completion; never claim an order was placed unless the MCP returned an order ID.`,
+    systemPrompt: `You operate the official Silpo MCP. Follow each tool schema exactly, never invent provider data, never call a tool outside the supplied allowlist, and finish the requested provider operation. ${operationInstruction} ${readbackInstruction} A checkout link is completion; never claim an order was placed unless the MCP returned an order ID.`,
   });
   const result = await agent.invoke({ messages: [{ role: "user", content: instruction }] });
+  const toolMessages = result.messages
+    .map(asMessage)
+    .filter((message): message is AgentMessage => message !== null)
+    .filter((message) => message.getType?.() === "tool" || message.type === "tool");
+  const usedTools = new Set(toolMessages.flatMap((message) => message.name ? [message.name] : []));
+  workflowLog("silpo.mcp.tools.used", { ...context, operation, tools: [...usedTools].sort().join(",") });
+  if (operation === "basket") {
+    const missingSteps = ["silpo_find_products_batch", "silpo_add_or_update_cart_products"].filter((name) => !usedTools.has(name));
+    if (missingSteps.length) throw new Error(`Silpo basket run did not execute required tools: ${missingSteps.join(", ")}`);
+  }
   const parsed = projectProviderResult(operation, result.messages);
   workflowLog("silpo.operation.completed", {
     ...context,

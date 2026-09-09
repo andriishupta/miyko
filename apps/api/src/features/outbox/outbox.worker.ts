@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import { householdMembers, households, users } from "@miyko/database/schema";
+import { householdMembers, households, users, workflows } from "@miyko/database/schema";
 import type { AuthUser, RequestContext } from "@miyko/contracts";
 import { withRlsContext, db } from "../../lib/database.js";
 import { AppError } from "../../lib/errors.js";
@@ -109,6 +109,11 @@ export class OutboxWorker {
       const safeError = error instanceof AppError ? error.code : "OUTBOX_HANDLER_FAILED";
       const backoffMs = Math.min(baseBackoffMs * (2 ** Math.max(event.attempts - 1, 0)), 3_600_000);
       await outboxService.markFailed(event.id, event.householdId, event.attempts, safeError, maxAttempts, backoffMs);
+      if (event.aggregateType === "workflow" && event.attempts >= maxAttempts) {
+        await db.update(workflows)
+          .set({ status: "failed", updatedAt: new Date() })
+          .where(and(eq(workflows.id, event.aggregateId), eq(workflows.householdId, event.householdId)));
+      }
       return event.attempts >= maxAttempts
         ? { published: 0, retrying: 0, deadLetter: 1 }
         : { published: 0, retrying: 1, deadLetter: 0 };

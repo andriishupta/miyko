@@ -29,6 +29,7 @@ const providerActionSchema = z.object({
 
 export const workflowActionSchema = z.discriminatedUnion("type", [
   providerActionSchema,
+  z.object({ type: z.literal("confirm_basket") }).strict(),
   z.object({ type: z.literal("fulfillment_selected"), mode: z.enum(["pickup", "delivery"]) }).strict(),
   z.object({ type: z.literal("delivery_slot_selected"), scheduledFrom: isoDate, scheduledTo: isoDate }).strict(),
   z.object({ type: z.literal("approve"), approvalId: uuid }).strict(),

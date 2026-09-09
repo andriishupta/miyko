@@ -47,7 +47,7 @@ const providerResultText = (result: unknown): string => {
   return JSON.stringify(result)
 }
 
-const providerOrderCount = (result: unknown): number | null => {
+const providerReceiptCount = (result: unknown): number | null => {
   if (!isRecord(result)) return null
   const text = providerResultText(result)
   let parsedText: unknown
@@ -58,7 +58,7 @@ const providerOrderCount = (result: unknown): number | null => {
   }
   const payload = result.structuredContent ?? parsedText
   if (isRecord(payload)) {
-    for (const key of ['orders', 'items', 'results']) {
+    for (const key of ['receipts', 'orders', 'items', 'results']) {
       if (Array.isArray(payload[key])) return payload[key].length
     }
   }
@@ -194,7 +194,7 @@ export class StoreProviderService {
     const accessToken = await this.getAccessToken(context, providerSlug)
     const namespace = householdMemoryNamespace(context.household.id)
     const result = await provider.getRecentOrders(accessToken, HISTORY_LIMIT)
-    const content = `Silpo latest ${HISTORY_LIMIT} online orders:\n${providerResultText(result)}`
+    const content = `Silpo latest ${HISTORY_LIMIT} in-store receipts:\n${providerResultText(result)}`
     const existing = (await mem0Client.list(namespace)).find((item) => {
       if (!isRecord(item) || !isRecord(item.metadata)) return false
       return item.metadata.source === HISTORY_MEMORY_SOURCE
@@ -202,7 +202,7 @@ export class StoreProviderService {
     const existingId = isRecord(existing) && typeof existing.id === 'string' ? existing.id : null
     if (existingId) {
       await mem0Client.update(existingId, content)
-      return { initialized: true, refreshed: true, memoryId: existingId, orderCount: providerOrderCount(result) }
+      return { initialized: true, refreshed: true, memoryId: existingId, receiptCount: providerReceiptCount(result) }
     }
 
     const memoryId = await mem0Client.add(namespace, content, {
@@ -210,7 +210,7 @@ export class StoreProviderService {
       providerSlug,
       householdId: context.household.id,
     })
-    return { initialized: true, refreshed: false, memoryId, orderCount: providerOrderCount(result) }
+    return { initialized: true, refreshed: false, memoryId, receiptCount: providerReceiptCount(result) }
   }
 
   private async upsertHouseholdConnection(householdId: string, memberId: string, providerId: string, accountId: string) {

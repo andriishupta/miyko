@@ -36,7 +36,7 @@ export type Provider = {
   capabilities: ProviderCapability[];
 };
 export type ProviderOAuthStartResponse = { authorizationUrl: string; returnUrl: string };
-export type ProviderMemoryBootstrapResponse = { initialized: boolean; refreshed: boolean; memoryId: string | null; orderCount: number | null };
+export type ProviderMemoryBootstrapResponse = { initialized: boolean; refreshed: boolean; memoryId: string | null; receiptCount: number | null };
 export type HouseholdProviderConnection = {
   id: UUID;
   providerId: UUID;
@@ -91,6 +91,7 @@ export type Workflow = {
 export type WorkflowProviderAction = { type: "provider_action"; requestId?: string; intent: string };
 export type WorkflowAction =
   | WorkflowProviderAction
+  | { type: "confirm_basket" }
   | { type: "fulfillment_selected"; mode: "pickup" | "delivery" }
   | { type: "delivery_slot_selected"; scheduledFrom: ISODateString; scheduledTo: ISODateString }
   | { type: "approve"; approvalId: UUID }

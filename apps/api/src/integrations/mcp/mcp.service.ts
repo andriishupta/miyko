@@ -14,6 +14,11 @@ const tokenSchema = z.object({
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 
+const toolResultHasError = (result: CallToolResult): boolean => {
+  if (result.isError) return true
+  return result.content.some((item) => item.type === 'text' && /^MCP error\b/i.test(item.text.trim()))
+}
+
 const withTimeout = async <T>(operation: string, work: () => Promise<T>) => {
   const { requestTimeoutMs } = mcpConfig()
   let timeout: ReturnType<typeof setTimeout> | undefined
@@ -71,7 +76,9 @@ export class McpService {
         const safeArguments = properties
           ? Object.fromEntries(Object.entries(arguments_).filter(([name]) => name in properties))
           : {}
-        return await client.callTool({ name: tool.name, arguments: safeArguments })
+        const result = await client.callTool({ name: tool.name, arguments: safeArguments })
+        if (toolResultHasError(result)) throw new AppError('MCP_TOOL_FAILED', 'Provider tool returned an error', 502)
+        return result
       } finally {
         await client.close()
       }

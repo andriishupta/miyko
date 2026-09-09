@@ -16,7 +16,7 @@ MiyKo is a household control plane around long-running agent workflows. It coord
 
 ```text
 owner: “Prepare dinner for us”
-  → graph imports a summary of the latest 10 Silpo online orders into Mem0 once
+  → graph imports a summary of the latest 10 Silpo in-store receipts into Mem0 once
   → initial request stays in graph state; the Silpo basket is untouched
 partner/editor: “Add beer”
   → request is added directly to the shared plan

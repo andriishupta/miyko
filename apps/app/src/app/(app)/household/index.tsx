@@ -1,5 +1,5 @@
-import { Stack, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { Stack, useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator } from 'react-native-paper';
 import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,19 +22,20 @@ export default function HouseholdScreen() {
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     let active = true;
     setLoading(true);
+    setError(null);
     Promise.all([api.household.summary(), api.household.members()])
       .then(([summary, nextMembers]) => {
         if (!active) return;
         setHousehold(summary);
         setMembers(nextMembers);
       })
-      .catch((cause) => { if (active) setError(cause instanceof ApiError ? cause.message : 'Could not load household.'); })
-      .finally(() => { if (active) setLoading(false); });
+    .catch((cause) => { if (active) setError(cause instanceof ApiError ? cause.message : 'Could not load household.'); })
+    .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [reloadKey]);
+  }, [reloadKey]));
 
   if (loading && !household) return <ScreenScroll bottomInset={insets.bottom + 112} contentContainerStyle={styles.centered}><ActivityIndicator color={theme.accent} /></ScreenScroll>;
   if (!household) return <ScreenScroll bottomInset={insets.bottom + 112}><Surface><MiykoText variant="section">Household unavailable</MiykoText><MiykoText variant="body" color="textSecondary">{error ?? 'The API did not return household data.'}</MiykoText><PrimaryButton label="Try again" onPress={() => setReloadKey((value) => value + 1)} /></Surface></ScreenScroll>;

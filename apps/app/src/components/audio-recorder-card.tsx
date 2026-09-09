@@ -51,7 +51,7 @@ export function AudioRecorderCard() {
 
   return <View style={styles.container}>
     <MiykoText variant="caption" color="textSecondary">HAVE AN IDEA?</MiykoText>
-    <FAB accessibilityLabel={recorderState.isRecording ? "Stop recording" : "Record an audio idea"} icon={() => <AppIcon name={recorderState.isRecording ? "arrow" : "mic"} size={30} color={theme.accentContrast} />} color={theme.accentContrast} customSize={84} mode="elevated" style={[styles.audioButton, { backgroundColor: theme.accent }]} onPress={() => void toggleRecording()} />
+    <FAB accessibilityLabel={recorderState.isRecording ? "Stop recording" : "Record an audio idea"} icon={() => <AppIcon name={recorderState.isRecording ? "arrow" : "mic"} size={25} color={theme.accentContrast} />} color={theme.accentContrast} customSize={68} mode="elevated" style={[styles.audioButton, { backgroundColor: theme.accent }]} onPress={() => void toggleRecording()} />
     <MiykoText variant="section">{recorderState.isRecording ? "Recording a request" : "Record a request"}</MiykoText>
     <MiykoText variant="caption" color="textSecondary" style={styles.center}>{recorderState.isRecording ? `${Math.round(recorderState.durationMillis / 1000)}s · Tap to stop` : uploading ? "Starting the managed workflow…" : "Your recording is sent to the API."}</MiykoText>
     {uploading && <ActivityIndicator color={theme.accent} />}
@@ -60,4 +60,4 @@ export function AudioRecorderCard() {
   </View>;
 }
 
-const styles = StyleSheet.create({ container: { alignItems: "center", gap: Spacing.two, paddingVertical: Spacing.three }, audioButton: { width: 84, height: 84, borderRadius: Radius.pill, alignItems: "center", justifyContent: "center" }, center: { textAlign: "center" }, result: { width: "100%", gap: Spacing.two }, resultHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: Spacing.two }, resultBlock: { gap: Spacing.one } });
+const styles = StyleSheet.create({ container: { alignItems: "center", gap: Spacing.two, paddingVertical: Spacing.three }, audioButton: { width: 68, height: 68, borderRadius: Radius.pill, alignSelf: "center", alignItems: "center", justifyContent: "center" }, center: { textAlign: "center" }, result: { width: "100%", gap: Spacing.two }, resultHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: Spacing.two }, resultBlock: { gap: Spacing.one } });

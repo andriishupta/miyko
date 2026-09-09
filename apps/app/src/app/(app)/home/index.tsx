@@ -1,5 +1,5 @@
-import { Stack, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { Stack, useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import { ActivityIndicator } from "react-native-paper";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -22,11 +22,13 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     let active = true;
+    setLoading(true);
+    setError(null);
     api.dashboard.get().then((value) => { if (active) setDashboard(value); }).catch((cause) => { if (active) setError(cause instanceof ApiError ? cause.message : "Could not load dashboard."); }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, []);
+  }, []));
 
   if (loading) return <ScreenScroll bottomInset={insets.bottom + 112} contentContainerStyle={styles.centered}><ActivityIndicator color={theme.accent} /></ScreenScroll>;
   if (!dashboard) return <ScreenScroll bottomInset={insets.bottom + 112}><Surface><MiykoText variant="section">Dashboard unavailable</MiykoText><MiykoText variant="body" color="danger">{error ?? "The API did not return dashboard data."}</MiykoText><PrimaryButton label="Try again" onPress={() => router.replace("/home")} /></Surface></ScreenScroll>;

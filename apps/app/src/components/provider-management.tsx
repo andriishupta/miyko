@@ -112,9 +112,9 @@ export function ProviderManagement({ onComplete }: ProviderManagementProps) {
             {isConnected ? (
               <View style={{ gap: Spacing.two }}>
                 <MiykoText variant="body" color="textSecondary">This provider is ready for the household.</MiykoText>
-                {isOwner && <SecondaryButton label="Load latest 10 orders into memory" disabled={isBusy} onPress={() => void runProviderAction(provider, async () => {
+                {isOwner && <SecondaryButton label="Load latest 10 store receipts into memory" disabled={isBusy} onPress={() => void runProviderAction(provider, async () => {
                   const result = await api.providers.bootstrapMemory(provider.slug);
-                  const count = result.orderCount ? ` (${result.orderCount} orders loaded)` : '';
+                  const count = result.receiptCount ? ` (${result.receiptCount} receipts loaded)` : '';
                   setMessage(result.refreshed ? `${provider.name} memory was refreshed${count}.` : `${provider.name} memory is ready${count}.`);
                 }, `Could not initialize ${provider.name} memory.`)} />}
                 {isOwner && <SecondaryButton label="Disconnect" onPress={() => void disconnectProvider(provider)} />}

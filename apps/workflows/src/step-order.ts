@@ -1,5 +1,5 @@
 import { ChatOpenAI } from "@langchain/openai";
-import { Command, START, StateGraph, interrupt, type GraphNode } from "@langchain/langgraph";
+import { Command, END, START, StateGraph, interrupt, type GraphNode } from "@langchain/langgraph";
 import { z } from "zod";
 import { workflowConfig } from "./config.js";
 import { findMemories, findMemoriesBySource, householdNamespace, memberNamespace } from "./memory.js";
@@ -10,6 +10,7 @@ const roleSchema = z.enum(["owner", "admin", "editor", "viewer"]);
 const actorSchema = z.object({ memberId: z.string().uuid(), role: roleSchema }).passthrough();
 const actionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("provider_action"), requestId: z.string().optional(), intent: z.string() }).passthrough(),
+  z.object({ type: z.literal("confirm_basket") }).passthrough(),
   z.object({ type: z.literal("fulfillment_selected"), mode: z.enum(["pickup", "delivery"]) }).passthrough(),
   z.object({ type: z.literal("delivery_slot_selected"), scheduledFrom: z.string(), scheduledTo: z.string() }).passthrough(),
   z.object({ type: z.literal("approve"), approvalId: z.string().uuid() }).passthrough(),
@@ -18,9 +19,9 @@ const actionSchema = z.discriminatedUnion("type", [
 const resumedActionSchema = z.object({ eventId: z.string(), action: actionSchema, actor: actorSchema }).passthrough();
 const plannedRequestSchema = z.object({ memberId: z.string().uuid(), text: z.string() }).passthrough();
 const classifiedSchema = z.object({
-  kind: z.enum(["add_request", "prepare_basket", "replace_product", "checkout"]),
+  kind: z.enum(["add_request", "prepare_basket", "replace_product", "checkout", "confirm_basket"]),
   instruction: z.string(),
-}).passthrough();
+});
 const stepOrderContextSchema = z.object({ providerAccessToken: z.string().min(1) }).passthrough();
 type StepOrderContext = z.infer<typeof stepOrderContextSchema>;
 
@@ -81,6 +82,7 @@ const initialize: WorkflowNode = async (state, runtime) => {
   return {
     phase: "collecting",
     plannedRequests: [{ memberId: state.memberId, text: state.text }],
+    fulfillmentMode: "pickup",
     memoryContext: [...householdMemories, ...memberMemories].flatMap((item) => item.memory ? [item.memory] : []).concat(historyContext),
     summary: "Initial request saved in LangGraph state; the Silpo basket has not been changed.",
   };
@@ -95,6 +97,7 @@ const classifyAction: WorkflowNode<"authorize_action"> = async (state) => {
   const action = state.latestAction;
   if (!action || !state.actor) throw new Error("Resumed workflow action and actor are required");
   if (action.type === "approve" || action.type === "decline") throw new Error("There is no approval waiting for this decision");
+  if (action.type === "confirm_basket") return new Command({ update: { classified: { kind: "confirm_basket", instruction: "Confirm the current pickup basket by adding or updating all confirmed planned products, then read the cart back. Do not place the final provider order." } }, goto: "authorize_action" });
   if (action.type === "fulfillment_selected") return new Command({ update: { classified: { kind: "prepare_basket", instruction: `Set fulfillment mode to ${action.mode}.` } }, goto: "authorize_action" });
   if (action.type === "delivery_slot_selected") return new Command({ update: { classified: { kind: "prepare_basket", instruction: `Set delivery slot from ${action.scheduledFrom} to ${action.scheduledTo}.` } }, goto: "authorize_action" });
 
@@ -105,7 +108,7 @@ const classifyAction: WorkflowNode<"authorize_action"> = async (state) => {
   let classified: z.infer<typeof classifiedSchema>;
   try {
     classified = await model.withStructuredOutput(classifiedSchema).invoke([
-      ["system", "Classify a household order instruction. add_request only records an item/meal request in graph state. prepare_basket creates or fills the Silpo basket. replace_product changes an existing basket item. checkout reads and returns the current checkout link; it never claims to place the order."],
+      ["system", "Classify a household order instruction. add_request only records an item/meal request in graph state. prepare_basket creates or fills the Silpo basket. replace_product changes an existing basket item. checkout reads and returns the current checkout link; confirm_basket is reserved for the explicit typed confirmation action and completes the MiyKo workflow after the provider basket is verified."],
       ["user", action.intent],
     ]);
     workflowLog("openai.classification.completed", { workflowId: state.workflowId, eventId: state.eventId, model: config.openAiModel, kind: classified.kind, durationMs: Date.now() - startedAt });
@@ -145,6 +148,23 @@ const providerOperation = (state: StepOrderState): SilpoOperation => {
   return "basket";
 };
 
+const effectiveFulfillment = (state: StepOrderState) => {
+  const action = state.latestAction;
+  const mode = action?.type === "fulfillment_selected" ? action.mode : state.fulfillmentMode ?? "pickup";
+  const scheduledFrom = action?.type === "delivery_slot_selected" ? action.scheduledFrom : state.scheduledFrom;
+  const scheduledTo = action?.type === "delivery_slot_selected" ? action.scheduledTo : state.scheduledTo;
+  return { mode, scheduledFrom, scheduledTo };
+};
+
+const fulfillmentInstruction = (state: StepOrderState) => {
+  const { mode, scheduledFrom, scheduledTo } = effectiveFulfillment(state);
+  if (mode === "pickup") {
+    return "Fulfillment is PICKUP. Use Silpo deliveryType SelfPickup and a pickup-compatible branch/cart. Never select DeliveryHome, never request a home-delivery address, and never reuse an expired slot. If Silpo requires a time slot, use a future available pickup slot returned by the MCP.";
+  }
+  const slot = scheduledFrom && scheduledTo ? `The selected delivery slot is ${scheduledFrom} to ${scheduledTo}.` : "No delivery slot is selected yet.";
+  return `Fulfillment is HOME DELIVERY. Use Silpo deliveryType DeliveryHome and a current future delivery slot. ${slot} Never use the current time as a slot. If the selected slot is unavailable, return the available slots instead of silently switching fulfillment mode.`;
+};
+
 const providerUpdate = (result: ProviderResult) => ({
   providerBasketId: result.providerBasketId,
   providerOrderId: result.providerOrderId,
@@ -161,16 +181,19 @@ const fulfillmentUpdate = (action: z.infer<typeof actionSchema> | undefined) => 
   return {};
 };
 
-const applyAction: WorkflowNode<"await_action"> = async (state, runtime) => {
+const applyAction: WorkflowNode<"await_action" | typeof END> = async (state, runtime) => {
   if (!state.actor || !state.classified) throw new Error("Authorized action is required");
   if (state.classified.kind === "add_request") {
     return new Command({ update: { plannedRequests: [...state.plannedRequests, { memberId: state.actor.memberId, text: state.classified.instruction }], phase: "collecting", summary: "Household request added to the shared order plan." }, goto: "await_action" });
   }
+  const operation = providerOperation(state);
   const plan = state.plannedRequests.map((request) => `- ${request.text}`).join("\n");
   const memory = state.memoryContext.map((item) => `- ${item}`).join("\n");
-  const result = await runSilpo(providerOperation(state), `${state.classified.instruction}\nConfirmed household plan:\n${plan}\nRelevant household memory:\n${memory || "- None"}`, providerAccessToken(runtime), { workflowId: state.workflowId, eventId: state.eventId });
-  const phase = state.classified.kind === "checkout" ? "ready_for_checkout" : "basket_ready";
-  return new Command({ update: { ...providerUpdate(result), ...fulfillmentUpdate(state.latestAction), phase }, goto: "await_action" });
+  const result = await runSilpo(operation, `${fulfillmentInstruction(state)}\n${state.classified.instruction}\nConfirmed household plan:\n${plan}\nRelevant household memory:\n${memory || "- None"}`, providerAccessToken(runtime), { workflowId: state.workflowId, eventId: state.eventId });
+  const completed = state.classified.kind === "confirm_basket";
+  const phase = completed ? "completed" : state.classified.kind === "checkout" ? "ready_for_checkout" : "basket_ready";
+  const summary = completed ? "Basket confirmed in Silpo. Finish checkout with the provider." : result.summary;
+  return new Command({ update: { ...providerUpdate(result), ...fulfillmentUpdate(state.latestAction), phase, summary }, goto: completed ? END : "await_action" });
 };
 
 export const stepOrderGraph = new StateGraph(stepOrderStateSchema, stepOrderContextSchema)
@@ -179,7 +202,7 @@ export const stepOrderGraph = new StateGraph(stepOrderStateSchema, stepOrderCont
   .addNode("classify_action", classifyAction, { ends: ["authorize_action"] })
   .addNode("authorize_action", authorizeAction, { ends: ["request_approval", "apply_action"] })
   .addNode("request_approval", requestApproval, { ends: ["await_action", "apply_action"] })
-  .addNode("apply_action", applyAction, { ends: ["await_action"] })
+  .addNode("apply_action", applyAction, { ends: ["await_action", END] })
   .addEdge(START, "initialize")
   .addEdge("initialize", "await_action")
   .compile();

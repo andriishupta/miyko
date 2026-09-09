@@ -44,13 +44,13 @@ const projectionSchema = z.object({
 }).passthrough();
 
 const workflowViewSchema = z.object({
-  phase: z.enum(["collecting", "approval_required", "basket_ready", "ready_for_checkout", "completed"]),
-  summary: z.string(),
-  plannedRequests: z.array(z.object({ memberId: z.string().uuid(), text: z.string() })),
-  items: z.array(z.object({ name: z.string(), quantity: z.string().nullable(), price: z.number().nullable(), imageUrl: z.string().nullable() })),
-  total: z.number().nullable(),
-  currency: z.string().nullable(),
-  checkoutUrl: z.string().url().nullable(),
+  phase: z.enum(["collecting", "approval_required", "basket_ready", "ready_for_checkout", "completed"]).default("collecting"),
+  summary: z.string().default("Workflow is waiting for the next household action."),
+  plannedRequests: z.array(z.object({ memberId: z.string().uuid(), text: z.string() }).passthrough()).default([]),
+  items: z.array(z.object({ name: z.string(), quantity: z.string().nullable(), price: z.number().nullable(), imageUrl: z.string().nullable() }).passthrough()).default([]),
+  total: z.number().nullable().default(null),
+  currency: z.string().nullable().default(null),
+  checkoutUrl: z.string().nullable().default(null),
 }).passthrough();
 
 const parseInterrupt = (candidate: unknown): WorkflowInterrupt | undefined => {

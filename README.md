@@ -27,6 +27,8 @@ login/register → create or join household → household owner connects Silpo o
 
 The provider abstraction and registry remain: they isolate provider authentication from the core flow. MCP tool discovery, product and basket operations are handled by the managed workflow after authorization and approval.
 
+The chat entry creates one workflow from the first request and immediately opens that workflow. Further additions, replacements and approvals happen inside the workflow; the chat composer is not used to create another workflow until the user exits and starts a new chat session.
+
 MiyKo may cache provider reads or the latest observed workflow/provider status to reduce repeated requests. These are read optimizations only: they are not authoritative state, are not approval evidence and must be revalidated by the managed workflow before a provider mutation.
 
 ## Repository

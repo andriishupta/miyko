@@ -26,19 +26,23 @@ LangGraph Agent Server owns checkpoints and interrupt/resume. MiyKo stores only 
 
 ```text
 owner connects the household Silpo account once through OAuth 2.1 + PKCE
-  → owner loads the latest 10 Silpo orders into Mem0
-  → start step-order from text/audio
+  → owner loads the latest 10 Silpo in-store receipts into Mem0
+  → start one step-order from the chat entry and open its workflow view
   → graph reads relevant Mem0 context
   → keep the initial request in LangGraph state; do not change the Silpo basket
   → owner/admin/editor additions go directly into the shared graph plan
   → viewer/child addition interrupts for owner/admin approval
   → approve adds it to the plan; decline removes it
-  → owner/admin asks to prepare the basket
-  → graph discovers current Silpo tool schemas and mutates the real basket
-  → owner/admin may request a replacement, fulfillment mode or delivery slot
+  → the MVP uses pickup by default; delivery selection remains a future extension
+  → owner/admin chooses `Prepare order`
+  → graph discovers current Silpo tool schemas, creates or reuses the pickup basket and adds the confirmed products
+  → owner/admin chooses `Confirm basket` to add/update the confirmed products, read back the current basket and finish MiyKo's workflow
+  → owner/admin may request a replacement; delivery is a later extension
   → graph returns names, quantities, prices, total and checkout link
   → owner finishes checkout in Silpo
 ```
+
+The chat entry is only a workflow starter. After the first request it routes to the created workflow and does not create another workflow from the same composer; members add, replace and approve requests inside that workflow.
 
 Notifications are outside the current MVP. The pending approval already appears in MiyKo and can be refreshed manually.
 
@@ -54,7 +58,7 @@ The API supplies the authenticated member ID and role to the graph. Mem0 and cli
 
 Use only `https://mcp.silpo.ua/mcp`. The graph calls `tools/list`, filters tools by operation and lets the model follow the returned JSON schemas. Initial history import is read-only. Basket preparation and replacement are real MCP writes.
 
-Silpo exposes basket mutation and checkout links but no final place-order tool. The workflow must not report a completed order unless Silpo returns an actual order ID. For the demo, opening the returned checkout link is the final manual step.
+Silpo exposes basket mutation and checkout links but no final place-order tool. `Prepare order` creates or updates the real pickup cart. `Confirm basket` performs the final provider-cart sync, reads it back and completes MiyKo's workflow; it does not place the final provider order. A checkout link is only a readback of the current cart, not an order confirmation. The workflow must not report a completed provider order unless Silpo returns an actual order ID. For the demo, opening the returned checkout link is the final manual step. Pickup uses `SelfPickup` and a future provider-available pickup slot. The initial in-store receipt import reads the active cart and a current available time slot before calling `silpo_get_my_offline_orders`, because that tool requires branch and delivery context.
 
 The MCP agent does not require a second LLM structured-output call. It completes the provider operation conversationally; `runSilpo` projects the latest relevant MCP tool result into the small basket/history view needed by LangGraph and the UI.
 
