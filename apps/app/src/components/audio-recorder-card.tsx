@@ -53,10 +53,10 @@ export function AudioRecorderCard() {
     <MiykoText variant="caption" color="textSecondary">HAVE AN IDEA?</MiykoText>
     <FAB accessibilityLabel={recorderState.isRecording ? "Stop recording" : "Record an audio idea"} icon={() => <AppIcon name={recorderState.isRecording ? "arrow" : "mic"} size={25} color={theme.accentContrast} />} color={theme.accentContrast} customSize={68} mode="elevated" style={[styles.audioButton, { backgroundColor: theme.accent }]} onPress={() => void toggleRecording()} />
     <MiykoText variant="section">{recorderState.isRecording ? "Recording a request" : "Record a request"}</MiykoText>
-    <MiykoText variant="caption" color="textSecondary" style={styles.center}>{recorderState.isRecording ? `${Math.round(recorderState.durationMillis / 1000)}s · Tap to stop` : uploading ? "Starting the managed workflow…" : "Your recording is sent to the API."}</MiykoText>
+    <MiykoText variant="caption" color="textSecondary" style={styles.center}>{recorderState.isRecording ? `${Math.round(recorderState.durationMillis / 1000)}s · Tap to stop` : uploading ? "Turning your idea into a plan…" : "Your recording is sent securely."}</MiykoText>
     {uploading && <ActivityIndicator color={theme.accent} />}
     {error && <MiykoText variant="caption" color="danger">{error}</MiykoText>}
-    {result && <Surface style={styles.result}><View style={styles.resultHeader}><MiykoText variant="section">Workflow started</MiykoText><StatusPill label="Managed" tone="success" /></View><View style={styles.resultBlock}><MiykoText variant="caption" color="textSecondary">Transcript</MiykoText><MiykoText variant="body">{result.transcript}</MiykoText></View><MiykoText variant="caption" color="textSecondary">Workflow ID: {result.workflowId}</MiykoText></Surface>}
+    {result && <Surface style={styles.result}><View style={styles.resultHeader}><MiykoText variant="section">Your plan is ready</MiykoText><StatusPill label="Ready" tone="success" /></View><View style={styles.resultBlock}><MiykoText variant="caption" color="textSecondary">What we heard</MiykoText><MiykoText variant="body">{result.transcript}</MiykoText></View><MiykoText variant="caption" color="textSecondary">Request ID: {result.workflowId}</MiykoText></Surface>}
   </View>;
 }
 

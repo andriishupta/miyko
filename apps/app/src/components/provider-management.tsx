@@ -34,7 +34,7 @@ export function ProviderManagement({ onComplete }: ProviderManagementProps) {
       setConnections(connectionResponse.items);
       setIsOwner(household.currentMember.role === 'owner');
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Could not load store providers.');
+      setError(cause instanceof ApiError ? cause.message : 'Could not load store accounts.');
     } finally {
       setLoading(false);
     }
@@ -94,7 +94,7 @@ export function ProviderManagement({ onComplete }: ProviderManagementProps) {
       {loading && <ActivityIndicator color={theme.accent} />}
       {error && <MiykoText variant="caption" color="danger">{error}</MiykoText>}
       {message && <MiykoText variant="caption" color="success">{message}</MiykoText>}
-      {!loading && providers.length === 0 && <Surface><MiykoText variant="body" color="textSecondary">No store providers are available yet.</MiykoText></Surface>}
+      {!loading && providers.length === 0 && <Surface><MiykoText variant="body" color="textSecondary">No store accounts are available yet.</MiykoText></Surface>}
       {!loading && providers.map((provider) => {
         const connection = connectionsByProvider.get(provider.slug);
         const isBusy = activeSlug === provider.slug;
@@ -106,25 +106,25 @@ export function ProviderManagement({ onComplete }: ProviderManagementProps) {
                 <MiykoText variant="section" style={{ flex: 1 }}>{provider.name}</MiykoText>
                 <StatusPill label={isConnected ? 'Connected' : connection ? 'Reconnect required' : 'Available'} tone={isConnected ? 'success' : connection ? 'warning' : 'neutral'} />
               </View>
-              <MiykoText variant="caption" color="textSecondary">{provider.capabilities.join(' · ') || 'Store integration'}</MiykoText>
+              <MiykoText variant="caption" color="textSecondary">Use this account for household shopping.</MiykoText>
             </View>
             <Divider />
             {isConnected ? (
               <View style={{ gap: Spacing.two }}>
-                <MiykoText variant="body" color="textSecondary">This provider is ready for the household.</MiykoText>
-                {isOwner && <SecondaryButton label="Load latest 10 store receipts into memory" disabled={isBusy} onPress={() => void runProviderAction(provider, async () => {
+                <MiykoText variant="body" color="textSecondary">This store account is ready for the household.</MiykoText>
+                {isOwner && <SecondaryButton label="Personalize from recent receipts" disabled={isBusy} onPress={() => void runProviderAction(provider, async () => {
                   const result = await api.providers.bootstrapMemory(provider.slug);
                   const count = result.receiptCount ? ` (${result.receiptCount} receipts loaded)` : '';
-                  setMessage(result.refreshed ? `${provider.name} memory was refreshed${count}.` : `${provider.name} memory is ready${count}.`);
-                }, `Could not initialize ${provider.name} memory.`)} />}
+                  setMessage(result.refreshed ? `Suggestions were refreshed${count}.` : `Suggestions are ready${count}.`);
+                }, `Could not refresh suggestions from ${provider.name}.`)} />}
                 {isOwner && <SecondaryButton label="Disconnect" onPress={() => void disconnectProvider(provider)} />}
               </View>
             ) : !isOwner ? (
-              <MiykoText variant="body" color="textSecondary">The household owner must connect this provider.</MiykoText>
+              <MiykoText variant="body" color="textSecondary">The household owner must connect this store account.</MiykoText>
             ) : (
               <View style={{ gap: Spacing.two }}>
-                <MiykoText variant="body" color="textSecondary">Sign in securely in the provider browser. MiyKo never receives your provider password.</MiykoText>
-                <PrimaryButton label={connection ? 'Reconnect provider' : 'Connect provider'} loading={isBusy} onPress={() => void connectProvider(provider)} icon="cart" />
+                <MiykoText variant="body" color="textSecondary">Sign in securely in the store browser. MiyKo never receives your store password.</MiykoText>
+                <PrimaryButton label={connection ? 'Reconnect store account' : 'Connect store account'} loading={isBusy} onPress={() => void connectProvider(provider)} icon="cart" />
               </View>
             )}
           </Surface>

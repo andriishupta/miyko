@@ -139,6 +139,7 @@ const rows = await db
 ## React and React Native
 
 - Keep components focused on presentation and interaction.
+- Keep implementation details such as orchestration frameworks, memory providers, protocols and internal state names out of user-facing copy. Translate them into short product language; reserve identifiers and diagnostics for explicitly hidden developer information.
 - Extract repeated UI into a shared `components` module.
 - Keep data fetching and domain logic out of low-level presentational components.
 - Keep loading, empty, error, disabled and pressed states explicit.

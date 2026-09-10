@@ -44,7 +44,7 @@ export function getNavigationTheme(mode: ThemeMode) {
       ...baseTheme.colors,
       primary: palette.accent,
       background: palette.background,
-      card: palette.backgroundElement,
+      card: palette.background,
       text: palette.text,
       border: palette.border,
       notification: palette.accent,

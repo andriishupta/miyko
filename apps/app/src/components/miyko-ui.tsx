@@ -6,7 +6,7 @@ import { Avatar as PaperAvatar, Button, Chip, IconButton as PaperIconButton, Sur
 import { Radius, Spacing, type ThemeColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-type SymbolName = 'house' | 'calendar' | 'gear' | 'mic' | 'message' | 'chevron' | 'cart' | 'person' | 'plus' | 'arrow';
+type SymbolName = 'house' | 'calendar' | 'gear' | 'mic' | 'message' | 'chevron' | 'chevronDown' | 'chevronUp' | 'back' | 'cart' | 'person' | 'plus' | 'arrow' | 'refresh';
 
 const symbols = {
   house: { ios: 'house.fill', android: 'home', web: 'home' },
@@ -15,10 +15,14 @@ const symbols = {
   mic: { ios: 'mic.fill', android: 'mic', web: 'mic' },
   message: { ios: 'bubble.left.and.bubble.right.fill', android: 'chat', web: 'chat' },
   chevron: { ios: 'chevron.right', android: 'chevron_forward', web: 'chevron_forward' },
+  chevronDown: { ios: 'chevron.down', android: 'keyboard_arrow_down', web: 'keyboard_arrow_down' },
+  chevronUp: { ios: 'chevron.up', android: 'keyboard_arrow_up', web: 'keyboard_arrow_up' },
+  back: { ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' },
   cart: { ios: 'cart.fill', android: 'add_shopping_cart', web: 'add_shopping_cart' },
   person: { ios: 'person.fill', android: 'person', web: 'person' },
   plus: { ios: 'plus', android: 'add', web: 'add' },
   arrow: { ios: 'arrow.up.right', android: 'arrow_upward', web: 'arrow_upward' },
+  refresh: { ios: 'arrow.clockwise', android: 'refresh', web: 'refresh' },
 } as const;
 
 export function AppIcon({ name, size = 20, color, ...props }: { name: SymbolName; size?: number; color?: string } & Omit<ComponentProps<typeof SymbolView>, 'name' | 'size' | 'tintColor'>) {
@@ -55,9 +59,11 @@ export function SecondaryButton({ label, onPress, icon, disabled = false }: { la
   return <Button accessibilityRole="button" mode="outlined" onPress={onPress} disabled={disabled} textColor={theme.accent} icon={icon ? () => <AppIcon name={icon} size={17} color={theme.accent} /> : undefined} contentStyle={styles.buttonContent} style={[styles.secondaryButton, { borderColor: theme.border }]} labelStyle={styles.buttonLabel} uppercase={false}>{label}</Button>;
 }
 
-export function IconButton({ name, label, onPress }: { name: SymbolName; label: string; onPress: () => void }) {
+export function IconButton({ name, label, onPress, disabled = false, emphasis = 'neutral' }: { name: SymbolName; label: string; onPress: () => void; disabled?: boolean; emphasis?: 'neutral' | 'accent' }) {
   const theme = useTheme();
-  return <PaperIconButton accessibilityLabel={label} icon={() => <AppIcon name={name} size={20} color={theme.text} />} iconColor={theme.text} containerColor={theme.backgroundElement} size={20} onPress={onPress} style={styles.iconButton} />;
+  const color = disabled ? theme.border : emphasis === 'accent' ? theme.accentContrast : theme.text;
+  const containerColor = emphasis === 'accent' ? theme.accent : theme.backgroundElement;
+  return <PaperIconButton accessibilityLabel={label} disabled={disabled} icon={() => <AppIcon name={name} size={20} color={color} />} iconColor={color} containerColor={containerColor} size={20} onPress={onPress} style={styles.iconButton} />;
 }
 
 export function StatusPill({ label, tone = 'neutral' }: { label: string; tone?: 'neutral' | 'accent' | 'warning' | 'success' }) {
@@ -81,7 +87,7 @@ export function Field({ label, placeholder, value, onChangeText, secureTextEntry
   return <PaperTextInput mode="outlined" label={label} value={value} onChangeText={onChangeText} placeholder={placeholder} secureTextEntry={secureTextEntry} textColor={theme.text} outlineColor={theme.border} activeOutlineColor={theme.accent} style={styles.input} />;
 }
 
-export function ScreenScroll({ children, bottomInset = 32, contentContainerStyle, ...props }: ComponentProps<typeof ScrollView> & { bottomInset?: number }) {
+export function ScreenScroll({ children, bottomInset = Spacing.four, contentContainerStyle, ...props }: ComponentProps<typeof ScrollView> & { bottomInset?: number }) {
   return <ScrollView {...props} contentInsetAdjustmentBehavior="automatic" keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.screenContent, { paddingBottom: bottomInset }, contentContainerStyle]}>{children}</ScrollView>;
 }
 

@@ -1,6 +1,5 @@
 import { Stack, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { View } from 'react-native';
 
 import { api, ApiError } from '@/api/client';
@@ -10,7 +9,6 @@ import { Spacing } from '@/constants/theme';
 
 export default function InviteMemberScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [invitation, setInvitation] = useState<ApiInvitationCreateResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -32,8 +30,8 @@ export default function InviteMemberScreen() {
   return (
     <>
       <Stack.Screen options={{ title: 'Invite member' }} />
-      <ScreenScroll bottomInset={insets.bottom + 112}>
-        <View style={{ gap: Spacing.two }}><MiykoText variant="title">Bring your household in.</MiykoText><MiykoText variant="body" color="textSecondary">Invite someone to add requests and participate in workflow approvals.</MiykoText></View>
+      <ScreenScroll>
+        <View style={{ gap: Spacing.two }}><MiykoText variant="title">Bring your household in.</MiykoText><MiykoText variant="body" color="textSecondary">Invite someone to add ideas and help with shared shopping decisions.</MiykoText></View>
         {invitation ? <Surface><MiykoText variant="section">Invitation created</MiykoText><MiykoText variant="body" color="textSecondary">A member invitation was created for {invitation.invitation.inviteeEmail ?? email}.</MiykoText><SecondaryButton label="Invite another person" onPress={() => { setInvitation(null); setEmail(''); }} /></Surface> : <Surface><Field label="EMAIL" placeholder="maria@example.com" value={email} onChangeText={setEmail} /><MiykoText variant="caption" color="textSecondary">They will join as a household member.</MiykoText>{error && <MiykoText variant="caption" color="danger">{error}</MiykoText>}<PrimaryButton label="Create invitation" onPress={createInvite} loading={loading} /></Surface>}
         <SecondaryButton label="Back to household" onPress={() => router.back()} />
       </ScreenScroll>
