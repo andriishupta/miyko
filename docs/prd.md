@@ -1,14 +1,14 @@
 # MiyKo — Product Requirements Document
 
-**Status:** Hackathon prototype  
-**Date:** September 2026  
+**Status:** Hackathon prototype
+**Date:** September 2026
 **Product:** Mobile household food agent  
 **Platform:** Expo / React Native  
 **Primary integration:** Official Silpo MCP
 
 ## 1. Product Summary
 
-MiyKo is a food agent with long-term memory that helps individuals and households decide what to eat, coordinate preferences, create grocery baskets and improve future purchases.
+MiyKo is a food agent with long-term memory that helps individuals and households decide what to eat, coordinate preferences, create grocery baskets and improve future purchases. The MVP is household-first, while the same workflow can also support an office team, party, picnic or temporary group travelling together.
 
 Unlike a traditional shopping assistant, MiyKo coordinates the complete workflow:
 
@@ -16,13 +16,13 @@ Unlike a traditional shopping assistant, MiyKo coordinates the complete workflow
 food event → managed workflow → household approval → provider action → memory update
 ```
 
-Users can record food events such as “make carbonara this week,” “dinner for two,” “buy meat” or “shop for two weeks,” collaborate with household members and turn an approved result into a real Silpo basket. Recipes and products come from the LLM and Silpo MCP; MiyKo does not maintain its own recipe or product catalog. MiyKo remembers preferences, previous purchases, portion feedback and recurring habits, then proactively suggests the next purchase when supplies may be running low.
+Users can record food events such as “make carbonara this week,” “dinner for two,” “order lunch for the office,” “buy meat for the barbecue” or “shop for two weeks,” collaborate with household members and turn an approved result into a real Silpo basket. Recipes and products come from the LLM and Silpo MCP; MiyKo does not maintain its own recipe or product catalog. MiyKo remembers preferences, previous purchases, portion feedback and recurring habits, then proactively suggests the next purchase when useful.
 
-A household may contain one person or multiple family members.
+A household may contain one person or multiple family members. For a party, picnic or office event it can be created as a temporary household using the same workflow.
 
 ## 2. Elevator Pitch
 
-MiyKo is a household food agent that remembers what people want to eat, what they previously purchased and what worked for them. It combines long-term memory with the official Silpo MCP to transform a few words into a personalized shopping plan and real basket. Household members can contribute requests, while an owner or admin controls provider mutations. Afterward, MiyKo learns from the outcome and improves the next shopping cycle.
+MiyKo is a household food agent that remembers what people want to eat, what they previously purchased and what worked for them. It combines long-term memory with the official Silpo MCP to transform a few words into a shared shopping plan and real basket. Household members can contribute requests, while an owner or admin controls provider mutations. Afterward, MiyKo learns from the outcome and improves the next shopping cycle.
 
 ## 3. Problem
 

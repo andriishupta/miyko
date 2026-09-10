@@ -1,6 +1,6 @@
 # MiyKo — household workflows with shared memory
 
-MiyKo is a household control plane around long-running agent workflows. It coordinates members, permissions, approvals and a connected store account without becoming a recipe, product, basket or order database.
+MiyKo is a household control plane around long-running agent workflows. It coordinates members, permissions, approvals and a connected store account without becoming a recipe, product, basket or order database. The same household workflow can also be used by an office team, at a party, on a picnic or during a barbecue trip.
 
 ## MVP value
 
@@ -15,7 +15,7 @@ MiyKo is a household control plane around long-running agent workflows. It coord
 ## Demo story
 
 ```text
-owner: “Prepare dinner for us”
+coordinator: “Prepare dinner for us”
   → graph imports a summary of the latest 10 Silpo in-store receipts into Mem0 once
   → initial request stays in graph state; the Silpo basket is untouched
 partner/editor: “Add beer”
@@ -37,6 +37,6 @@ Notifications are narrated in the hackathon demo but are not implemented in this
 
 MiyKo does not store recipes, meal plans, provider products, basket items, receipts or LangGraph checkpoints. Recipes may be generated when a workflow needs them. Provider reads may be cached later, but the provider remains authoritative and every mutation must re-read current state.
 
-Permissions are deny-by-default. The API supplies authenticated household identity and role; Mem0 and the LLM cannot grant access. Owners and admins can approve and mutate the provider basket, editors can add plan requests directly, and viewer requests require approval.
+Permissions are deny-by-default. The API supplies authenticated household identity and role; Mem0 and the LLM cannot grant access. Owners and admins can approve and mutate the provider basket, editors can add plan requests directly, and viewer requests require approval. The same roles can be used when the household represents an office team, party or temporary group.
 
 For the local demo, `langgraph dev` keeps pause/resume state in its local development storage across requests and ordinary restarts while that storage is preserved. A hosted or production-like Agent Server is needed later for durability across machine loss and deployment replacement. Silpo authentication is OAuth 2.1 Authorization Code + PKCE; MiyKo must never collect the owner's Silpo password.

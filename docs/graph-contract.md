@@ -4,7 +4,9 @@
 
 | Workflow kind / graph slug | Purpose |
 | --- | --- |
-| `step-order` | Multi-member household plan that becomes a real provider basket |
+| `step-order` | Multi-member household plan that becomes a real provider basket; the same flow can cover a party, picnic or office event |
+
+The contract uses `householdId` as the domain field. No second group identifier is needed for the broader use cases.
 
 The slug is code, not an environment variable. Add future workflows to the shared contract enum and API registry.
 

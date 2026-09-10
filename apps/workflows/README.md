@@ -2,6 +2,8 @@
 
 Local LangGraph application for MiyKo. The graph slug is the hardcoded workflow kind `step-order`; it is not configuration.
 
+`step-order` is the household workflow for the MVP. The same workflow can represent a family dinner, office lunch, party or temporary shopping group; the current input field remains `householdId`.
+
 ## Local setup
 
 1. Copy `.env.example` to `.env`.
@@ -12,6 +14,6 @@ Local LangGraph application for MiyKo. The graph slug is the hardcoded workflow 
 
 The local Agent Server owns graph checkpoints. MiyKo PostgreSQL does not contain a LangGraph checkpointer. The initial request and member additions remain in graph state until the order flow ends; Mem0 stores reusable household context and the summary of the latest ten Silpo in-store receipts. `langgraph dev` persists development state to its local directory, which is enough for the recorded demo if that directory is kept. Hosted or production-like LangGraph is needed later for durability across machine loss or replacement.
 
-Silpo currently exposes basket operations and checkout links, not a final place-order tool. `step-order` uses pickup for the MVP, prepares or confirms the real basket, then returns its checkout link for the owner to finish in Silpo. `Prepare order` and `Confirm basket` are provider-cart mutations; neither places the final order. Before every start/resume, the API resolves the household owner's encrypted OAuth credential and passes the access token as runtime-only context, outside graph state and Mem0.
+Silpo currently exposes basket operations and checkout links, not a final place-order tool. `step-order` defaults to pickup, supports delivery selection, prepares or confirms the real basket, then returns its checkout link for the household owner to finish in Silpo. `Prepare order` and `Confirm basket` are provider-cart mutations; neither places the final order. Before every start/resume, the API resolves the household owner's encrypted OAuth credential and passes the access token as runtime-only context, outside graph state and Mem0.
 
 The workflow writes JSON lines to stdout for OpenAI classification/model calls, discovered Silpo tools, every MCP tool start/completion and the final basket summary. Prompts, tool arguments and credentials are deliberately excluded. Read them in the workflow terminal; the same stdout is available through `docker logs` if this process is containerized later.

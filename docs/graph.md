@@ -2,6 +2,8 @@
 
 The runnable graph lives in `apps/workflows` and is registered under the hardcoded slug `step-order`. It runs locally with LangGraph Agent Server for the MVP demo; no LangGraph deployment and no MiyKo-owned checkpointer are required.
 
+The product concept remains household for the MVP. A household can also be temporary in practice, such as a party, picnic or office event; these examples use the same graph and contract.
+
 ## Local services
 
 ```text
@@ -31,13 +33,13 @@ owner connects the household Silpo account once through OAuth 2.1 + PKCE
   → graph reads relevant Mem0 context
   → keep the initial request in LangGraph state; do not change the Silpo basket
   → owner/admin/editor additions go directly into the shared graph plan
-  → viewer/child addition interrupts for owner/admin approval
+  → viewer/household member addition interrupts for owner/admin approval
   → approve adds it to the plan; decline removes it
-  → the MVP uses pickup by default; delivery selection remains a future extension
+  → the MVP defaults to pickup, while delivery and delivery-slot selection are supported
   → owner/admin chooses `Prepare order`
   → graph discovers current Silpo tool schemas, creates or reuses the pickup basket and adds the confirmed products
   → owner/admin chooses `Confirm basket` to add/update the confirmed products, read back the current basket and finish MiyKo's workflow
-  → owner/admin may request a replacement; delivery is a later extension
+  → owner/admin may request a replacement, pickup or delivery mode, and a delivery slot
   → graph returns names, quantities, prices, total and checkout link
   → owner finishes checkout in Silpo
 ```
@@ -71,7 +73,7 @@ OAuth is Authorization Code + PKCE with Dynamic Client Registration. `POST /prov
 - Mem0 member namespace `member:{memberId}`: relevant personal preferences.
 - PostgreSQL: no messages, plans, products, basket items or checkpoints.
 
-The owner must preload the `silpo_order_history` memory from provider management before starting the first workflow. The API calls the read-only history tool and creates or refreshes that household memory; no local database marker is needed. Every workflow reads the existing household and member memories during initialization. The graph never calls provider history as a fallback: if the initial household memory is missing, initialization stops and asks the owner to preload it. Mem0 is context only; it does not authorize actions or replace graph state.
+The owner must preload the `silpo_order_history` memory from provider management before starting the first workflow. The **Personalize from recent receipts** action calls the read-only history tool and creates or refreshes that household memory; no local database marker is needed. Every workflow reads the existing household and member memories during initialization. The graph does not silently fetch history when the memory is missing: initialization stops and asks the owner to preload it. Mem0 is context only; it does not authorize actions or replace graph state.
 
 ## Local evidence
 

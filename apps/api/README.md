@@ -2,6 +2,8 @@
 
 Hono API for authentication, household access, provider connections and the thin control plane around managed workflows. Workflow memory and checkpoints stay in managed services.
 
+The MVP keeps `household` as the domain name. The same household workflow can also be used for an office team, party, picnic or other temporary participants without adding a second domain model.
+
 ## Runtime boundary
 
 - PostgreSQL/Drizzle stores identity, household membership, provider credentials, thin workflow projections, approval decisions, audit data and the retryable outbox transport.

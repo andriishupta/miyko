@@ -4,7 +4,7 @@ The local/deployed graph setup and API payload contract are documented in [graph
 
 ## Ownership rule
 
-MiyKo is a household control plane around managed agent workflows. It does not become a recipe database, product catalog or order-management system.
+MiyKo is a household control plane around managed agent workflows. It does not become a recipe database, product catalog or order-management system. The same model can later be used for an office team, party, picnic or temporary group.
 
 | Concern | Owner |
 | --- | --- |

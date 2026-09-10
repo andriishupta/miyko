@@ -45,7 +45,7 @@ export class HouseholdsService {
     const rows = await db.execute(sql`
       select * from public.miyko_household_members(${context.household.id}::uuid)
     `)
-    return (rows as HouseholdMemberLookup[]).map((row) => toContractMember({
+    return (rows as unknown as HouseholdMemberLookup[]).map((row) => toContractMember({
       id: row.member_id,
       householdId: row.household_id,
       userId: row.user_id,
