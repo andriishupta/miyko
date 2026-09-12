@@ -1,5 +1,7 @@
 # MiyKo
 
+The project for the [AI-Factory by Silpo](https://ai-factory.silpo.ua/) hackathon.
+
 ## Idea
 
 MiyKo is a food AI agent that turns shared purchases for a household or another group into durable, memory-backed workflows. A family dinner, office pizza party or picnic starts as one conversation where members add requests, roles determine who may change or approve them, and the same workflow continues until the provider basket and fulfillment are confirmed.
