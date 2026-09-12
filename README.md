@@ -10,6 +10,10 @@ Long-term memory belongs to the household and its members rather than one chat. 
 
 The MVP is household-first, but the workflow model also supports temporary groups. Future workflow kinds include scheduled and recurring orders, multi-store comparison, temporary delegation and consensus approval.
 
+## Ідея
+
+«МійКо» — харчовий AI-агент, який перетворює спільні закупівлі сім’ї або групи людей на керовані робочі сценарії — workflows. Для сімейної вечері, офісної pizza party чи пікніка учасники додають побажання в одному чаті. Процес зберігається між діями: його можна продовжити пізніше, запланувати на певний час, повторювати регулярно або використати для порівняння кошиків у кількох магазинах-провайдерах. Довготривала пам’ять прив’язана до групи і її учасників, а не лише до одного чату: вона враховує вподобання та попередні покупки, дозволяє повторити минуле замовлення або точніше підібрати товари. МійКо самостійно допомагає скласти план, виконати заміни, вибрати доставку й довести покупку до оформлення, залишаючи важливі рішення за людиною. Технічно рішення поєднує LangChain's LangGraph для тривалих workflows, Mem0 для довготривалої пам’яті та multi-provider архітектуру для роботи з різними сервісами.
+
 ## What it is
 
 MiyKo consists of one mobile AI-agent experience and five clear runtime boundaries:
@@ -149,7 +153,33 @@ For a physical phone, set API `HOST=0.0.0.0`, replace localhost in `EXPO_PUBLIC_
 
 ## Screenshots
 
-<!-- Add product screenshots here. -->
+<table>
+  <tr>
+    <td align="center"><a href="docs/screenshots/01-langgraph-step-order-graph.png"><img src="docs/screenshots/01-langgraph-step-order-graph.png" alt="LangGraph step-order graph" width="100%"></a><br><sub>01 · LangGraph workflow</sub></td>
+    <td align="center"><a href="docs/screenshots/02-dual-user-empty-dashboard.png"><img src="docs/screenshots/02-dual-user-empty-dashboard.png" alt="Owner and viewer dashboards" width="100%"></a><br><sub>02 · Owner and viewer</sub></td>
+    <td align="center"><a href="docs/screenshots/03-household-members-and-provider.png"><img src="docs/screenshots/03-household-members-and-provider.png" alt="Household members and Silpo provider" width="100%"></a><br><sub>03 · Household and roles</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="docs/screenshots/04-silpo-oauth-authorization.png"><img src="docs/screenshots/04-silpo-oauth-authorization.png" alt="Silpo OAuth authorization" width="100%"></a><br><sub>04 · Silpo OAuth</sub></td>
+    <td align="center"><a href="docs/screenshots/05-mem0-order-history-memories.png"><img src="docs/screenshots/05-mem0-order-history-memories.png" alt="Order history stored in Mem0" width="100%"></a><br><sub>05 · Order-history memory</sub></td>
+    <td align="center"><a href="docs/screenshots/06-owner-order-dashboard.png"><img src="docs/screenshots/06-owner-order-dashboard.png" alt="Owner dinner order dashboard" width="100%"></a><br><sub>06 · Owner starts an order</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="docs/screenshots/07-step-order-initial-plan.png"><img src="docs/screenshots/07-step-order-initial-plan.png" alt="Initial shared order plan" width="100%"></a><br><sub>07 · Initial order plan</sub></td>
+    <td align="center"><a href="docs/screenshots/08-silpo-basket-ready.png"><img src="docs/screenshots/08-silpo-basket-ready.png" alt="Silpo basket ready in MiyKo" width="100%"></a><br><sub>08 · Basket ready</sub></td>
+    <td align="center"><a href="docs/screenshots/09-silpo-mcp-workflow-logs.png"><img src="docs/screenshots/09-silpo-mcp-workflow-logs.png" alt="Silpo MCP workflow logs" width="100%"></a><br><sub>09 · Real MCP tool calls</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="docs/screenshots/10-household-approval-flow.png"><img src="docs/screenshots/10-household-approval-flow.png" alt="Household member request and owner approval" width="100%"></a><br><sub>10 · Household approval</sub></td>
+    <td align="center"><a href="docs/screenshots/11-silpo-checkout-basket.png"><img src="docs/screenshots/11-silpo-checkout-basket.png" alt="Real Silpo checkout basket" width="100%"></a><br><sub>11 · Silpo checkout basket</sub></td>
+    <td align="center"><a href="docs/screenshots/12-completed-order-dashboard.png"><img src="docs/screenshots/12-completed-order-dashboard.png" alt="Completed order on owner and viewer dashboards" width="100%"></a><br><sub>12 · Workflow completed</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="docs/screenshots/13-mem0-memory-dashboard.png"><img src="docs/screenshots/13-mem0-memory-dashboard.png" alt="Mem0 memory dashboard" width="100%"></a><br><sub>13 · Long-term memory</sub></td>
+    <td></td>
+    <td></td>
+  </tr>
+</table>
 
 ## Repository
 

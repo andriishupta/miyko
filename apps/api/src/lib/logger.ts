@@ -1,4 +1,12 @@
 type LogFields = Record<string, unknown>
+type LogLevel = 'info' | 'warn' | 'error'
+
+const logColors: Record<LogLevel, string> = {
+  info: '\u001b[32m',
+  warn: '\u001b[33m',
+  error: '\u001b[31m',
+}
+const resetColor = '\u001b[0m'
 
 const redact = (value: unknown): unknown => {
   if (Array.isArray(value)) return value.map(redact)
@@ -10,15 +18,21 @@ const redact = (value: unknown): unknown => {
   }))
 }
 
-export const logger = {
-  info(message: string, fields: LogFields = {}) {
-    console.info(JSON.stringify({ level: 'info', message, ...redact(fields) as object }))
-  },
-  warn(message: string, fields: LogFields = {}) {
-    console.warn(JSON.stringify({ level: 'warn', message, ...redact(fields) as object }))
-  },
-  error(message: string, fields: LogFields = {}) {
-    console.error(JSON.stringify({ level: 'error', message, ...redact(fields) as object }))
-  },
+const formatLog = (level: LogLevel, message: string, fields: LogFields) => {
+  const line = JSON.stringify({ level, message, ...redact(fields) as object })
+  return process.env.NODE_ENV === 'production' || process.env.NO_COLOR !== undefined
+    ? line
+    : `${logColors[level]}${line}${resetColor}`
 }
 
+export const logger = {
+  info(message: string, fields: LogFields = {}) {
+    console.info(formatLog('info', message, fields))
+  },
+  warn(message: string, fields: LogFields = {}) {
+    console.warn(formatLog('warn', message, fields))
+  },
+  error(message: string, fields: LogFields = {}) {
+    console.error(formatLog('error', message, fields))
+  },
+}

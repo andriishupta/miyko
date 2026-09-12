@@ -11,6 +11,7 @@ import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 const avatarColors = ['#B8D8C0', '#F3C9A8', '#C7C1EA', '#F4D58D'];
+const memberRoleOrder: Record<ApiHouseholdMember['role'], number> = { owner: 0, admin: 1, editor: 2, viewer: 3 };
 
 export default function HouseholdScreen() {
   const router = useRouter();
@@ -39,12 +40,18 @@ export default function HouseholdScreen() {
   if (loading && !household) return <ScreenScroll contentContainerStyle={styles.centered}><ActivityIndicator color={theme.accent} /></ScreenScroll>;
   if (!household) return <ScreenScroll><Surface><MiykoText variant="section">Household unavailable</MiykoText><MiykoText variant="body" color="textSecondary">{error ?? 'Your household could not be loaded.'}</MiykoText><PrimaryButton label="Try again" onPress={() => setReloadKey((value) => value + 1)} /></Surface></ScreenScroll>;
 
+  const sortedMembers = [...members].sort((left, right) => {
+    if (left.id === household.currentMember.id) return -1;
+    if (right.id === household.currentMember.id) return 1;
+    return memberRoleOrder[left.role] - memberRoleOrder[right.role];
+  });
+
   return (
     <>
       <Stack.Screen options={{ title: 'Household', headerLargeTitle: false, headerLeft: () => <Pressable accessibilityRole="button" accessibilityLabel="Back to MiyKo" hitSlop={12} onPress={() => router.canGoBack() ? router.back() : router.replace('/home')}><AppIcon name="back" size={21} color={theme.text} /></Pressable> }} />
       <ScreenScroll contentContainerStyle={styles.content}>
         <Surface style={styles.householdCard}><View style={[styles.householdMark, { backgroundColor: theme.accent }]}><MiykoText variant="section" color="accentContrast">{household.name.slice(0, 2).toUpperCase()}</MiykoText></View><View style={{ flex: 1, gap: 3 }}><MiykoText variant="section">{household.name}</MiykoText><MiykoText variant="body" color="textSecondary">{members.length} members</MiykoText></View><StatusPill label={household.currentMember.role} tone="accent" /></Surface>
-        <View style={{ gap: Spacing.two }}><SectionTitle title="Members" action={`${members.length} people`} /><Surface>{members.map((member, index) => <MemberRow key={member.id} member={member} color={avatarColors[index % avatarColors.length]} />)}</Surface></View>
+        <View style={{ gap: Spacing.two }}><SectionTitle title="Members" action={`${members.length} people`} /><Surface>{sortedMembers.map((member, index) => <MemberRow key={member.id} member={member} color={avatarColors[index % avatarColors.length]} isCurrent={member.id === household.currentMember.id} />)}</Surface></View>
         {household.currentMember.role === 'owner' && <PrimaryButton label="Invite a member" icon="plus" onPress={() => router.push('/household/invite')} />}
         <View style={{ gap: Spacing.two }}><SectionTitle title="Store account" /><ProviderManagement /></View>
       </ScreenScroll>
@@ -52,11 +59,11 @@ export default function HouseholdScreen() {
   );
 }
 
-function MemberRow({ member, color }: { member: ApiHouseholdMember; color: string }) {
+function MemberRow({ member, color, isCurrent }: { member: ApiHouseholdMember; color: string; isCurrent: boolean }) {
   const theme = useTheme();
   const name = member.user?.displayName ?? member.user?.email ?? member.userId;
   const initials = name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
-  return <View style={styles.memberRow}><Avatar initials={initials} color={color} /><View style={{ flex: 1, gap: 2 }}><MiykoText variant="body">{name}</MiykoText><MiykoText variant="caption" color="textSecondary">{member.user?.email ?? 'Email unavailable'} · {member.role}</MiykoText></View><View style={styles.memberStatus}><View style={[styles.statusDot, { backgroundColor: theme.success }]} /><MiykoText variant="caption" color="textSecondary">Active</MiykoText></View></View>;
+  return <View style={styles.memberRow}><Avatar initials={initials} color={color} /><View style={{ flex: 1, gap: 2 }}><MiykoText variant="body">{name}</MiykoText><MiykoText variant="caption" color="textSecondary">{member.user?.email ?? 'Email unavailable'} · {member.role}</MiykoText></View>{isCurrent ? <StatusPill label="You" tone="accent" /> : <View style={styles.memberStatus}><View style={[styles.statusDot, { backgroundColor: theme.success }]} /><MiykoText variant="caption" color="textSecondary">Active</MiykoText></View>}</View>;
 }
 
 const styles = StyleSheet.create({

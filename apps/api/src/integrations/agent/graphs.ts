@@ -47,6 +47,12 @@ const workflowViewSchema = z.object({
   phase: z.enum(["collecting", "approval_required", "basket_ready", "ready_for_checkout", "completed"]).default("collecting"),
   summary: z.string().default("Workflow is waiting for the next household action."),
   plannedRequests: z.array(z.object({ memberId: z.string().uuid(), text: z.string() }).passthrough()).default([]),
+  latestAction: z.object({ type: z.string(), intent: z.string().min(1).optional() }).passthrough().optional(),
+  pendingRequest: z.object({
+    requestId: z.string().min(1),
+    actor: z.object({ memberId: z.string().uuid() }).passthrough(),
+    classified: z.object({ instruction: z.string().min(1) }).passthrough(),
+  }).passthrough().nullable().default(null),
   items: z.array(z.object({ name: z.string(), quantity: z.string().nullable(), price: z.number().nullable(), imageUrl: z.string().nullable() }).passthrough()).default([]),
   total: z.number().nullable().default(null),
   currency: z.string().nullable().default(null),
@@ -143,7 +149,23 @@ const getWorkflowView: AgentLayer["getWorkflowView"] = async ({ workflowKind, th
   const state = await client.threads.getState(threadId);
   const parsed = workflowViewSchema.safeParse(state.values);
   if (!parsed.success) throw new AppError("AGENT_INVALID_RESPONSE", "LangGraph returned an invalid workflow view", 502);
-  return parsed.data;
+  const view = parsed.data;
+  return {
+    phase: view.phase,
+    summary: view.summary,
+    plannedRequests: view.plannedRequests,
+    pendingApproval: view.pendingRequest ? {
+      requestId: view.pendingRequest.requestId,
+      memberId: view.pendingRequest.actor.memberId,
+      text: view.latestAction?.type === "provider_action" && view.latestAction.intent
+        ? view.latestAction.intent
+        : view.pendingRequest.classified.instruction,
+    } : null,
+    items: view.items,
+    total: view.total,
+    currency: view.currency,
+    checkoutUrl: view.checkoutUrl,
+  };
 };
 
 export const createAgentLayer = (): AgentLayer => ({ startWorkflow: start, resumeWorkflow: resume, getWorkflowView });

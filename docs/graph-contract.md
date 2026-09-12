@@ -63,7 +63,7 @@ type ApprovalInterrupt = {
 };
 ```
 
-The API projects this interrupt into `workflow_approvals`. A routine `workflow_action` interrupt only means the graph is waiting and does not create an approval.
+The API projects this interrupt into `workflow_approvals`. The approval text remains in LangGraph state and is exposed through the sanitized live workflow view while the decision is pending; it is not copied into PostgreSQL. A routine `workflow_action` interrupt only means the graph is waiting and does not create an approval.
 
 ## Projection
 

@@ -59,7 +59,7 @@ try {
 
     await tx.insert(households).values({
       id: householdId,
-      name: 'MiyKo Demo Household',
+      name: 'Demo Household',
       ownerId: demoUsers[0].id,
     })
 

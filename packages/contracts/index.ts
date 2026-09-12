@@ -104,6 +104,7 @@ export type WorkflowView = {
   phase: "collecting" | "approval_required" | "basket_ready" | "ready_for_checkout" | "completed";
   summary: string;
   plannedRequests: Array<{ memberId: UUID; text: string }>;
+  pendingApproval: { requestId: string; memberId: UUID; text: string } | null;
   items: WorkflowViewItem[];
   total: number | null;
   currency: string | null;
