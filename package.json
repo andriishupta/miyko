@@ -13,8 +13,8 @@
     "typecheck": "pnpm --recursive --if-present run typecheck"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "Andrii Shupta <andrii.shupta@gmail.com>",
+  "license": "Apache-2.0",
   "devEngines": {
     "packageManager": {
       "name": "pnpm",

@@ -210,3 +210,7 @@ The API passes the current provider access token to each workflow run as runtime
 ## Development check
 
 Run `pnpm typecheck` from the repository root to type-check every TypeScript workspace. GitHub Actions runs the same command for pushes and pull requests.
+
+## License
+
+MiyKo is licensed under the [Apache License 2.0](LICENSE). Use, modification and distribution are permitted under its terms, including preservation of the applicable license and attribution notices. See [NOTICE](NOTICE) for project attribution.
