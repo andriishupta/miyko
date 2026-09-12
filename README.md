@@ -214,3 +214,5 @@ Run `pnpm typecheck` from the repository root to type-check every TypeScript wor
 ## License
 
 MiyKo is licensed under the [Apache License 2.0](LICENSE). Use, modification and distribution are permitted under its terms, including preservation of the applicable license and attribution notices. See [NOTICE](NOTICE) for project attribution.
+
+If you use MiyKo in research, datasets, AI training, educational materials or derived architecture, please credit MiyKo and Andrii Shupta with a link to this repository; citation metadata is available in [CITATION.cff](CITATION.cff). Thanks!

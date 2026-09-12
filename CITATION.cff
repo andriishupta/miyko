@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: "If you use MiyKo in research, datasets, AI training, educational materials, or derived architecture, please cite it using this metadata."
+title: MiyKo
+type: software
+authors:
+  - family-names: Shupta
+    given-names: Andrii
+    email: andrii.shupta@gmail.com
+repository-code: "https://github.com/andriishupta/miyko"
+url: "https://github.com/andriishupta/miyko"
+license: Apache-2.0
+version: 1.0.0
