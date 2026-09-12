@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto'
+import { and, eq, inArray, isNull } from 'drizzle-orm'
 import { createClient } from '@miyko/database/client'
-import { householdMembers, households, providers, users } from '@miyko/database/schema'
+import { householdMembers, households, providers, userSessions, users } from '@miyko/database/schema'
 import { hashPassword } from '../src/lib/password.js'
 
 const migrationUrl = process.env.MIGRATION_DATABASE_URL
@@ -9,20 +11,43 @@ if (!migrationUrl) throw new Error('MIGRATION_DATABASE_URL is required for the d
 const client = createClient({ connectionString: migrationUrl, maxConnections: 1 })
 const db = client.db
 
-const ownerId = '10000000-0000-4000-8000-000000000001'
-const adminId = '10000000-0000-4000-8000-000000000002'
-const householdId = '20000000-0000-4000-8000-000000000001'
-const providerId = '30000000-0000-4000-8000-000000000001'
-
 const demoUsers = [
-  { id: ownerId, memberId: '21000000-0000-4000-8000-000000000001', email: 'owner@miyko.local', firstName: 'Olena', lastName: 'Owner', displayName: 'Olena', role: 'owner' as const },
-  { id: adminId, memberId: '21000000-0000-4000-8000-000000000002', email: 'admin@miyko.local', firstName: 'Andrii', lastName: 'Admin', displayName: 'Andrii', role: 'admin' as const },
-  { id: '10000000-0000-4000-8000-000000000003', memberId: '21000000-0000-4000-8000-000000000003', email: 'user@miyko.local', firstName: 'Danylo', lastName: 'User', displayName: 'Danylo', role: 'viewer' as const },
+  { id: randomUUID(), memberId: randomUUID(), email: 'owner@miyko.local', firstName: 'Olena', lastName: 'Owner', displayName: 'Olena', role: 'owner' as const },
+  { id: randomUUID(), memberId: randomUUID(), email: 'admin@miyko.local', firstName: 'Andrii', lastName: 'Admin', displayName: 'Andrii', role: 'admin' as const },
+  { id: randomUUID(), memberId: randomUUID(), email: 'user@miyko.local', firstName: 'Danylo', lastName: 'User', displayName: 'Danylo', role: 'viewer' as const },
 ]
 
+const householdId = randomUUID()
+const seededAt = new Date()
+const archiveTimestamp = seededAt.toISOString().replace(/[-:.]/g, '')
+
 try {
-  for (const user of demoUsers) {
-    await db.insert(users).values({
+  const result = await db.transaction(async (tx) => {
+    const previousUsers = await tx
+      .select({ id: users.id, email: users.email })
+      .from(users)
+      .where(inArray(users.normalizedEmail, demoUsers.map((user) => user.email)))
+
+    if (previousUsers.length > 0) {
+      const previousUserIds = previousUsers.map((user) => user.id)
+      await tx
+        .update(userSessions)
+        .set({ revokedAt: seededAt })
+        .where(and(inArray(userSessions.userId, previousUserIds), isNull(userSessions.revokedAt)))
+
+      for (const previousUser of previousUsers) {
+        const [localPart, domain] = previousUser.email.split('@')
+        if (!localPart || !domain) throw new Error(`Cannot archive invalid demo email: ${previousUser.email}`)
+        const archivedEmail = `${localPart}+archived-${archiveTimestamp}@${domain}`.toLowerCase()
+        await tx.update(users).set({
+          email: archivedEmail,
+          normalizedEmail: archivedEmail,
+          updatedAt: seededAt,
+        }).where(eq(users.id, previousUser.id))
+      }
+    }
+
+    await tx.insert(users).values(demoUsers.map((user) => ({
       id: user.id,
       email: user.email,
       normalizedEmail: user.email,
@@ -30,51 +55,55 @@ try {
       firstName: user.firstName,
       lastName: user.lastName,
       displayName: user.displayName,
-    }).onConflictDoUpdate({
-      target: users.id,
-      set: {
-        email: user.email,
-        normalizedEmail: user.email,
-        passwordHash: hashPassword(demoPassword),
-        firstName: user.firstName,
-        lastName: user.lastName,
-        displayName: user.displayName,
-        status: 'active',
-        updatedAt: new Date(),
-      },
-    })
-  }
+    })))
 
-  await db.insert(households).values({ id: householdId, name: 'MiyKo Demo Household', ownerId }).onConflictDoUpdate({ target: households.id, set: { name: 'MiyKo Demo Household', ownerId, updatedAt: new Date() } })
-  for (const user of demoUsers) {
-    await db.insert(householdMembers).values({
+    await tx.insert(households).values({
+      id: householdId,
+      name: 'MiyKo Demo Household',
+      ownerId: demoUsers[0].id,
+    })
+
+    await tx.insert(householdMembers).values(demoUsers.map((user) => ({
       id: user.memberId,
       householdId,
       userId: user.id,
       role: user.role,
-      status: 'active',
-    }).onConflictDoUpdate({
-      target: householdMembers.id,
-      set: { householdId, userId: user.id, role: user.role, status: 'active', removedAt: null, updatedAt: new Date() },
-    })
-  }
+      status: 'active' as const,
+    })))
 
-  await db.insert(providers).values({
-    id: providerId,
-    name: 'Silpo',
-    slug: 'silpo',
-    status: 'active',
-    capabilities: ['mcp'],
-  }).onConflictDoUpdate({
-    target: providers.id,
-    set: { name: 'Silpo', slug: 'silpo', status: 'active', capabilities: ['mcp'], updatedAt: new Date() },
+    const [provider] = await tx.insert(providers).values({
+      id: randomUUID(),
+      name: 'Silpo',
+      slug: 'silpo',
+      status: 'active',
+      capabilities: ['mcp'],
+    }).onConflictDoUpdate({
+      target: providers.slug,
+      set: { name: 'Silpo', status: 'active', capabilities: ['mcp'], updatedAt: seededAt },
+    }).returning({ id: providers.id })
+
+    if (!provider) throw new Error('Silpo provider was not created or resolved')
+
+    return {
+      archivedUsers: previousUsers.map((user) => user.email),
+      providerId: provider.id,
+    }
   })
 
   console.log(JSON.stringify({
-    message: 'Seeded MiyKo demo household',
+    message: 'Created a fresh MiyKo demo household',
+    seededAt: seededAt.toISOString(),
     householdId,
-    users: demoUsers.map(({ email, role }) => ({ email, role, password: demoPassword })),
-    provider: 'silpo',
+    archivedUsers: result.archivedUsers,
+    users: demoUsers.map(({ id, memberId, email, role }) => ({
+      id,
+      memberId,
+      email,
+      role,
+      password: demoPassword,
+    })),
+    provider: { id: result.providerId, slug: 'silpo' },
+    next: 'Sign in as owner, connect Silpo, personalize from recent receipts, then start a workflow.',
   }))
 } finally {
   await client.close()

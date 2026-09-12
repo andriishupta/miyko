@@ -8,6 +8,7 @@
   },
   "scripts": {
     "start:api:dev": "node --env-file=.env apps/api/node_modules/tsx/dist/cli.mjs watch apps/api/src/index.ts",
+    "seed:demo": "node --env-file=.env apps/api/node_modules/tsx/dist/cli.mjs apps/api/scripts/seed-demo-users.ts",
     "test": "echo \"Error: no test specified\" && exit 1",
     "typecheck": "pnpm --recursive --if-present run typecheck"
   },

@@ -89,10 +89,12 @@ set -a
 source .env
 set +a
 pnpm --filter @miyko/database db:migrate
-pnpm --filter api seed:demo
+pnpm seed:demo
 ```
 
-The seed creates one household with three accounts. Unless `DEMO_PASSWORD` was changed, all use `miyko-demo-password`:
+Every `pnpm seed:demo` run creates new random user, member and household IDs. Existing demo users are preserved under timestamped `+archived-...` email addresses and their active sessions are revoked. Existing database records, LangGraph threads and Mem0 memories are not deleted; their old IDs keep them isolated from the new demo.
+
+The command prints the new IDs and creates one household with three accounts. Unless `DEMO_PASSWORD` was changed, all use `miyko-demo-password`:
 
 - `owner@miyko.local` — connects Silpo and approves actions;
 - `admin@miyko.local` — may approve and perform provider actions;
@@ -129,6 +131,19 @@ From Expo, open iOS, Android or web. You can also start a target directly with `
 3. Run **Personalize from recent receipts** to load up to ten recent receipts into household memory.
 4. Start the `step-order` workflow from chat.
 5. Use the admin/user accounts to demonstrate additions and approval.
+
+The seed does not create a workflow or copy the old Silpo connection. Connect Silpo and preload memory first; the owner’s first chat request then creates a new workflow UUID and LangGraph thread.
+
+### Test owner and viewer in two iOS simulators
+
+1. Open the macOS Simulator app and use **File → Open Simulator** to boot two different iOS devices.
+2. Start Expo once with `pnpm --filter app start`.
+3. In the Expo terminal press `Shift+I`, select the first simulator, then repeat and select the second simulator.
+4. Sign in as `owner@miyko.local` on the first device and `user@miyko.local` on the second. Each simulator has isolated app storage and keeps its own session.
+5. As owner, connect Silpo, run **Personalize from recent receipts**, then create the dinner workflow.
+6. As viewer, open the same active workflow and request an item such as “Add the same ice cream I had last week.”
+7. As owner, reopen or refresh the workflow and approve the pending request.
+8. Continue as owner: prepare the basket, request a replacement if needed, choose pickup/delivery, confirm the basket and open Silpo checkout.
 
 For a physical phone, set API `HOST=0.0.0.0`, replace localhost in `EXPO_PUBLIC_API_URL` with the development machine’s LAN address, and use a phone-reachable LAN or HTTPS callback registered with Silpo. `127.0.0.1` on the phone points to the phone itself.
 
