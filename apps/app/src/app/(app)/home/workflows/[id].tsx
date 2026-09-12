@@ -1,4 +1,5 @@
 import { Stack, useLocalSearchParams } from "expo-router";
+import { Image } from "expo-image";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { KeyboardAvoidingView, Linking, Platform, StyleSheet, View } from "react-native";
 import { ActivityIndicator, List, TextInput } from "react-native-paper";
@@ -137,7 +138,7 @@ export default function WorkflowScreen() {
           {!workflowView ? <MiykoText variant="body" color="textSecondary">The plan will appear here as soon as it is ready.</MiykoText> : <View style={styles.planBody}>
             <MiykoText variant="body" color="textSecondary">{getUserFacingSummary(workflowView.summary)}</MiykoText>
             {workflowView.plannedRequests.map((request, index) => <View key={`${request.memberId}-${index}`} style={[styles.bubble, { backgroundColor: theme.accentSoft }]}><MiykoText variant="body">{request.text}</MiykoText></View>)}
-            {workflowView.items.map((item, index) => <View key={`${item.name}-${index}`} style={styles.itemRow}><MiykoText variant="body">{item.name}{item.quantity ? ` · ${item.quantity}` : ""}</MiykoText><MiykoText variant="caption" color="textSecondary">{item.price === null ? "Price not available" : `${item.price} ${workflowView.currency ?? ""}`}</MiykoText></View>)}
+            {workflowView.items.length > 0 && <View style={styles.productList}>{workflowView.items.map((item, index) => <ProductRow key={`${item.name}-${index}`} item={item} currency={workflowView.currency} />)}</View>}
             {workflowView.total !== null && <MiykoText variant="section">Total: {workflowView.total} {workflowView.currency ?? ""}</MiykoText>}
             {workflowView.checkoutUrl && <PrimaryButton label="Open checkout" icon="cart" onPress={() => void Linking.openURL(workflowView.checkoutUrl as string)} />}
           </View>}
@@ -157,6 +158,25 @@ export default function WorkflowScreen() {
       {!workflowCompleted && <View style={[styles.composer, { backgroundColor: theme.backgroundElement, borderTopColor: theme.border, paddingBottom: insets.bottom + Spacing.two }]}><IconButton name="mic" label="Voice input coming soon" disabled onPress={() => undefined} /><TextInput mode="outlined" value={message} onChangeText={setMessage} placeholder="Message this chat" textColor={theme.text} outlineColor={theme.border} activeOutlineColor={theme.accent} multiline numberOfLines={2} contentStyle={styles.inputContent} outlineStyle={styles.inputOutline} style={styles.input} onSubmitEditing={() => sendMessage()} /><IconButton name="arrow" label="Send message" onPress={sendMessage} /></View>}
     </KeyboardAvoidingView>
   </>;
+}
+
+function ProductRow({ item, currency }: { item: ApiWorkflowView["items"][number]; currency: string | null }) {
+  const theme = useTheme();
+  return <View style={[styles.productRow, { borderColor: theme.border }]}>
+    {item.imageUrl
+      ? <Image source={{ uri: item.imageUrl }} accessibilityLabel={item.name} contentFit="cover" transition={150} style={styles.productImage} />
+      : <View style={[styles.productPlaceholder, { backgroundColor: theme.backgroundSelected }]}><AppIcon name="cart" size={20} color={theme.textSecondary} /></View>}
+    <View style={styles.productCopy}>
+      <MiykoText variant="body" numberOfLines={2}>{item.name}</MiykoText>
+      {item.quantity && <MiykoText variant="caption" color="textSecondary">{item.quantity}</MiykoText>}
+    </View>
+    <MiykoText variant="label" style={styles.productPrice}>{formatPrice(item.price, currency)}</MiykoText>
+  </View>;
+}
+
+function formatPrice(price: number | null, currency: string | null) {
+  if (price === null) return "—";
+  return `${price.toFixed(2)}${currency ? ` ${currency}` : ""}`;
 }
 
 function AccordionCard({ title, summary, expanded, onPress, children }: { title: string; summary: string; expanded: boolean; onPress: () => void; children: ReactNode }) {
@@ -191,7 +211,12 @@ const styles = StyleSheet.create({
   accordion: { paddingHorizontal: Spacing.two },
   planBody: { gap: Spacing.two, paddingHorizontal: Spacing.two, paddingBottom: Spacing.two },
   bubble: { alignSelf: "flex-start", maxWidth: "88%", paddingHorizontal: Spacing.three, paddingVertical: Spacing.two, borderRadius: Radius.medium },
-  itemRow: { gap: Spacing.one },
+  productList: { gap: Spacing.two },
+  productRow: { minHeight: 72, flexDirection: "row", alignItems: "center", gap: Spacing.two, padding: Spacing.two, borderWidth: 1, borderRadius: Radius.small, borderCurve: "continuous" },
+  productImage: { width: 56, height: 56, borderRadius: Radius.small },
+  productPlaceholder: { width: 56, height: 56, alignItems: "center", justifyContent: "center", borderRadius: Radius.small, borderCurve: "continuous" },
+  productCopy: { flex: 1, gap: Spacing.one },
+  productPrice: { flexShrink: 0, fontVariant: ["tabular-nums"] },
   approvalList: { gap: Spacing.two, paddingHorizontal: Spacing.two, paddingBottom: Spacing.two },
   approval: { gap: Spacing.two, paddingTop: Spacing.two, borderTopWidth: 1 },
   approvalHeading: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", gap: Spacing.two },

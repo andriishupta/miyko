@@ -8,21 +8,21 @@
 
 ## 1. Product Summary
 
-MiyKo is a food agent with long-term memory that helps individuals and households decide what to eat, coordinate preferences, create grocery baskets and improve future purchases. The MVP is household-first, while the same workflow can also support an office team, party, picnic or temporary group travelling together.
+MiyKo is a food AI agent that coordinates shared purchases through durable workflows, explicit roles, human approvals and household-scoped long-term memory. The MVP is household-first, while the same workflow can also support an office team, party, picnic or another temporary group.
 
 Unlike a traditional shopping assistant, MiyKo coordinates the complete workflow:
 
 ```text
-food event → managed workflow → household approval → provider action → memory update
+shared request → managed workflow → member changes → approval → provider basket → checkout
 ```
 
-Users can record food events such as “make carbonara this week,” “dinner for two,” “order lunch for the office,” “buy meat for the barbecue” or “shop for two weeks,” collaborate with household members and turn an approved result into a real Silpo basket. Recipes and products come from the LLM and Silpo MCP; MiyKo does not maintain its own recipe or product catalog. MiyKo remembers preferences, previous purchases, portion feedback and recurring habits, then proactively suggests the next purchase when useful.
+Users can start requests such as “make carbonara this week,” “dinner for two,” “repeat last week’s office pizza order” or “shop for two weeks,” collaborate with household members and turn an approved result into a real provider basket. Recipes and products come from the LLM and store provider; MiyKo does not maintain its own catalog. Long-term memory belongs to the household and its members, so previous purchases and preferences remain useful beyond a single chat.
 
 A household may contain one person or multiple family members. For a party, picnic or office event it can be created as a temporary household using the same workflow.
 
 ## 2. Elevator Pitch
 
-MiyKo is a household food agent that remembers what people want to eat, what they previously purchased and what worked for them. It combines long-term memory with the official Silpo MCP to transform a few words into a shared shopping plan and real basket. Household members can contribute requests, while an owner or admin controls provider mutations. Afterward, MiyKo learns from the outcome and improves the next shopping cycle.
+MiyKo turns shared household or group purchases into durable workflows that can pause, resume, run on a schedule, repeat from memory or compare multiple stores. Members contribute requests, while roles and approvals keep important decisions under human control. Long-term household/member memory carries preferences and previous purchases across workflows instead of losing them with one chat.
 
 ## 3. Problem
 
@@ -36,7 +36,7 @@ Food planning requires repeated decisions:
 - when another purchase may be needed;
 - whether previous quantities were too small or excessive.
 
-Existing shopping assistants mainly solve the current request. They do not maintain a continuous household food cycle with shared planning, approval, long-term memory and proactive follow-up.
+Existing shopping assistants mainly solve the current request. They do not maintain a durable shared workflow with roles, approvals, long-term group memory and reusable purchase context.
 
 ## 4. Target Users
 
@@ -363,7 +363,15 @@ Follow-up notifications are deferred from the core MVP. If enabled later, a noti
 - child profile;
 - item replacement;
 - feedback after purchase;
-- future food-event workflows.
+- additional workflow kinds.
+
+### Future workflow directions
+
+- `scheduled-order`: activates at a selected time and requests confirmation after refreshing provider state;
+- `recurring-order`: prepares a new basket from the previous order and relevant memory;
+- `multi-store-order`: compares baskets through several store providers;
+- `delegated-order`: temporarily transfers management and approval authority;
+- `consensus-order`: requires decisions from several members or an agreed majority.
 
 ### Not included
 
@@ -413,13 +421,13 @@ Follow-up notifications are deferred from the core MVP. If enabled later, a noti
 
 Mushroom helps users complete a current shopping request.
 
-MiyKo maintains a continuous household food relationship:
+MiyKo maintains a durable household or group workflow with reusable memory:
 
 ```text
 Mushroom: request → recommendation → basket
 
-MiyKo: memory → food event → collaboration → approval
-       → basket → feedback → proactive next cycle
+MiyKo: shared request → persistent workflow → collaboration
+       → approval → provider basket → reusable memory
 ```
 
-MiyKo is not another shopping chat. It is a persistent food-control layer that coordinates people, preferences, purchases and future decisions.
+MiyKo is not another shopping chat. It coordinates people, permissions, memory and real provider actions across time while keeping consequential decisions under human control.
